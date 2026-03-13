@@ -194,7 +194,7 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
         await pc.setLocalDescription();
 
         if (roomId && userId) {
-          await supabase.from("signaling").insert({
+          await (supabase.from("signaling") as any).insert({
             room_id: roomId,
             sender_id: userId,
             type: "answer",
