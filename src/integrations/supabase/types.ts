@@ -238,6 +238,33 @@ export type Database = {
           },
         ]
       }
+      signaling: {
+        Row: {
+          created_at: string
+          id: string
+          payload: Json
+          room_id: string
+          sender_id: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payload: Json
+          room_id: string
+          sender_id: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          room_id?: string
+          sender_id?: string
+          type?: string
+        }
+        Relationships: []
+      }
       skills: {
         Row: {
           category: string

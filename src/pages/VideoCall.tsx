@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useWebRTC } from "@/hooks/useWebRTC";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import {
-  Mic, MicOff, Camera, CameraOff, Monitor, MonitorOff,
-  PhoneOff, MessageCircle, Clock, Send, X,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Camera, CameraOff, Clock, Wifi, WifiOff } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
+import VideoControls from "@/components/video/VideoControls";
+import ChatPanel from "@/components/video/ChatPanel";
 
 export default function VideoCall() {
   const { sessionId } = useParams();
@@ -25,9 +23,10 @@ export default function VideoCall() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [newMsg, setNewMsg] = useState("");
   const timerRef = useRef<NodeJS.Timeout>();
+
+  const { remoteVideoRef, connectionState, isConnected, replaceTrack, cleanup: cleanupWebRTC } =
+    useWebRTC({ roomId, userId: user?.id, localStream });
 
   // Start local media
   useEffect(() => {
@@ -41,38 +40,19 @@ export default function VideoCall() {
       }
     };
     startMedia();
-
-    // Timer
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
 
     return () => {
       clearInterval(timerRef.current);
-      localStream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
-  // Load chat messages + realtime
+  // Cleanup on unmount
   useEffect(() => {
-    if (!sessionId) return;
-    const loadMessages = async () => {
-      const { data } = await supabase
-        .from("chat_messages")
-        .select("*")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true });
-      if (data) setMessages(data);
+    return () => {
+      localStream?.getTracks().forEach((t) => t.stop());
     };
-    loadMessages();
-
-    const channel = supabase
-      .channel(`chat-${sessionId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `session_id=eq.${sessionId}` },
-        (payload) => setMessages((prev) => [...prev, payload.new])
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [sessionId]);
+  }, [localStream]);
 
   const toggleMute = () => {
     if (localStream) {
@@ -90,11 +70,12 @@ export default function VideoCall() {
 
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      // Revert to camera
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         setLocalStream(stream);
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        stream.getVideoTracks().forEach((t) => replaceTrack(t));
+        stream.getAudioTracks().forEach((t) => replaceTrack(t));
         setIsScreenSharing(false);
       } catch {
         toast.error("Could not revert to camera");
@@ -104,11 +85,10 @@ export default function VideoCall() {
         const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
         localStream?.getVideoTracks().forEach((t) => t.stop());
         if (localVideoRef.current) localVideoRef.current.srcObject = screen;
+        screen.getVideoTracks().forEach((t) => replaceTrack(t));
         setLocalStream(screen);
         setIsScreenSharing(true);
-        screen.getVideoTracks()[0].onended = () => {
-          toggleScreenShare();
-        };
+        screen.getVideoTracks()[0].onended = () => toggleScreenShare();
       } catch {
         // User cancelled
       }
@@ -118,7 +98,8 @@ export default function VideoCall() {
   const endCall = async () => {
     localStream?.getTracks().forEach((t) => t.stop());
     clearInterval(timerRef.current);
-    // Update session
+    cleanupWebRTC();
+
     if (sessionId) {
       const minutes = Math.floor(elapsed / 60);
       await supabase.from("sessions").update({
@@ -127,30 +108,43 @@ export default function VideoCall() {
         duration_minutes: minutes,
         credits_transferred: minutes >= 5 ? 1 : 0,
       }).eq("id", sessionId);
+
+      // Clean up signaling data
+      if (roomId) {
+        await (supabase.from("signaling") as any).delete().eq("room_id", roomId);
+      }
     }
     navigate("/sessions");
     toast.success("Call ended");
   };
 
-  const sendMessage = async () => {
-    if (!newMsg.trim() || !sessionId || !user) return;
-    await supabase.from("chat_messages").insert({
-      session_id: sessionId,
-      sender_id: user.id,
-      content: newMsg.trim(),
-    });
-    setNewMsg("");
-  };
+  const formatTime = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
-  const formatTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const connectionLabel = () => {
+    switch (connectionState) {
+      case "connected": return "Connected";
+      case "connecting": return "Connecting...";
+      case "disconnected": return "Reconnecting...";
+      case "failed": return "Connection failed";
+      default: return "Waiting for peer...";
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-foreground flex flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 bg-foreground/90">
         <div className="flex items-center gap-3">
-          <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-sm font-medium text-primary-foreground/80">Live Session</span>
+          <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-primary" : "bg-muted-foreground"} animate-pulse`} />
+          <span className="text-sm font-medium text-primary-foreground/80">
+            {connectionLabel()}
+          </span>
+          {isConnected ? (
+            <Wifi className="h-3.5 w-3.5 text-primary" />
+          ) : (
+            <WifiOff className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
         </div>
         <div className="flex items-center gap-2 text-primary-foreground/80">
           <Clock className="h-4 w-4" />
@@ -160,13 +154,26 @@ export default function VideoCall() {
 
       {/* Video area */}
       <div className="flex-1 relative flex items-center justify-center p-4">
-        {/* Placeholder for remote video */}
-        <div className="w-full max-w-4xl aspect-video bg-card/10 rounded-2xl flex items-center justify-center border border-primary-foreground/10">
-          <div className="text-center text-primary-foreground/40">
-            <Camera className="mx-auto h-12 w-12 mb-2" />
-            <p className="text-sm">Waiting for peer to connect...</p>
-            <p className="text-xs mt-1 text-primary-foreground/20">WebRTC signaling requires a backend signaling server</p>
-          </div>
+        {/* Remote video */}
+        <div className="w-full max-w-4xl aspect-video bg-card/10 rounded-2xl overflow-hidden border border-primary-foreground/10">
+          {isConnected ? (
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="text-center text-primary-foreground/40">
+                <Camera className="mx-auto h-12 w-12 mb-2" />
+                <p className="text-sm">Waiting for peer to connect...</p>
+                <p className="text-xs mt-1 text-primary-foreground/20">
+                  Share this session link with your partner
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Local video (PiP) */}
@@ -181,77 +188,24 @@ export default function VideoCall() {
 
         {/* Chat panel */}
         <AnimatePresence>
-          {chatOpen && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="absolute top-4 right-4 bottom-20 w-80 bg-card rounded-2xl border border-border flex flex-col shadow-lg"
-            >
-              <div className="flex items-center justify-between p-4 border-b border-border">
-                <span className="font-display font-semibold text-sm">Chat</span>
-                <button onClick={() => setChatOpen(false)}><X className="h-4 w-4 text-muted-foreground" /></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {messages.map((m) => (
-                  <div key={m.id} className={`text-sm p-2 rounded-lg max-w-[85%] ${m.sender_id === user?.id ? "bg-primary/10 ml-auto" : "bg-muted"}`}>
-                    {m.content}
-                  </div>
-                ))}
-              </div>
-              <div className="p-3 border-t border-border flex gap-2">
-                <Input
-                  value={newMsg}
-                  onChange={(e) => setNewMsg(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                  placeholder="Type a message..."
-                  className="text-sm"
-                />
-                <Button size="icon" variant="ghost" onClick={sendMessage}><Send className="h-4 w-4" /></Button>
-              </div>
-            </motion.div>
+          {chatOpen && sessionId && user && (
+            <ChatPanel sessionId={sessionId} userId={user.id} onClose={() => setChatOpen(false)} />
           )}
         </AnimatePresence>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-3 py-4 bg-foreground/90">
-        <Button
-          size="lg"
-          variant="ghost"
-          onClick={toggleMute}
-          className={`rounded-full h-12 w-12 ${isMuted ? "bg-destructive/20 text-destructive" : "text-primary-foreground/80 hover:bg-primary-foreground/10"}`}
-        >
-          {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-        </Button>
-        <Button
-          size="lg"
-          variant="ghost"
-          onClick={toggleCamera}
-          className={`rounded-full h-12 w-12 ${isCameraOff ? "bg-destructive/20 text-destructive" : "text-primary-foreground/80 hover:bg-primary-foreground/10"}`}
-        >
-          {isCameraOff ? <CameraOff className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
-        </Button>
-        <Button
-          size="lg"
-          variant="ghost"
-          onClick={toggleScreenShare}
-          className={`rounded-full h-12 w-12 ${isScreenSharing ? "bg-primary/20 text-primary" : "text-primary-foreground/80 hover:bg-primary-foreground/10"}`}
-        >
-          {isScreenSharing ? <MonitorOff className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
-        </Button>
-        <Button
-          size="lg"
-          variant="ghost"
-          onClick={() => setChatOpen(!chatOpen)}
-          className="rounded-full h-12 w-12 text-primary-foreground/80 hover:bg-primary-foreground/10"
-        >
-          <MessageCircle className="h-5 w-5" />
-        </Button>
-        <Button size="lg" onClick={endCall} className="rounded-full h-12 w-12 bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-          <PhoneOff className="h-5 w-5" />
-        </Button>
-      </div>
+      <VideoControls
+        isMuted={isMuted}
+        isCameraOff={isCameraOff}
+        isScreenSharing={isScreenSharing}
+        chatOpen={chatOpen}
+        onToggleMute={toggleMute}
+        onToggleCamera={toggleCamera}
+        onToggleScreenShare={toggleScreenShare}
+        onToggleChat={() => setChatOpen(!chatOpen)}
+        onEndCall={endCall}
+      />
     </div>
   );
 }
