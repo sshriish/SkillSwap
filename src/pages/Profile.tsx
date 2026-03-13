@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
@@ -10,18 +10,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { Plus, X, Save } from "lucide-react";
+import { Plus, X, Save, Camera, Video, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CATEGORIES = ["Programming", "Design", "Marketing", "Music", "Languages", "Business", "Science", "General"];
 
 export default function Profile() {
   const { user } = useAuth();
-  const [profile, setProfile] = useState({ display_name: "", bio: "", avatar_url: "" });
+  const [profile, setProfile] = useState({ display_name: "", bio: "", avatar_url: "", trial_video_url: "" });
   const [skills, setSkills] = useState<any[]>([]);
   const [newSkill, setNewSkill] = useState({ name: "", category: "General", skill_type: "offered", description: "" });
   const [showAddSkill, setShowAddSkill] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -35,6 +40,54 @@ export default function Profile() {
     };
     load();
   }, [user]);
+
+  const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
+    setUploadingAvatar(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user.id}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+      const avatarUrl = data.publicUrl;
+      const { error: updateError } = await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("user_id", user.id);
+      if (updateError) throw updateError;
+      setProfile((prev) => ({ ...prev, avatar_url: avatarUrl }));
+      toast.success("Profile picture updated!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload image");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const uploadVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith("video/")) { toast.error("Please select a video file"); return; }
+    if (file.size > 50 * 1024 * 1024) { toast.error("Video must be under 50MB"); return; }
+    setUploadingVideo(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user.id}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from("trial-videos").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("trial-videos").getPublicUrl(fileName);
+      const videoUrl = data.publicUrl;
+      const { error: updateError } = await supabase.from("profiles").update({ trial_video_url: videoUrl }).eq("user_id", user.id);
+      if (updateError) throw updateError;
+      setProfile((prev) => ({ ...prev, trial_video_url: videoUrl }));
+      toast.success("Trial video uploaded!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload video");
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
 
   const saveProfile = async () => {
     setSaving(true);
@@ -82,6 +135,59 @@ export default function Profile() {
         </motion.div>
 
         <Card>
+          <CardHeader><CardTitle>Profile Media</CardTitle></CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center gap-6">
+              <div className="relative">
+                {profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Profile" className="h-24 w-24 rounded-full object-cover border-4 border-primary/20" />
+                ) : (
+                  <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center border-4 border-primary/20">
+                    <Camera className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Profile Picture</p>
+                <p className="text-xs text-muted-foreground">JPG, PNG or GIF · Max 5MB</p>
+                <input ref={avatarInputRef} type="file" accept="image/*" onChange={uploadAvatar} className="hidden" />
+                <Button size="sm" variant="outline" onClick={() => avatarInputRef.current?.click()} disabled={uploadingAvatar}>
+                  <Upload className="mr-2 h-3 w-3" />
+                  {uploadingAvatar ? "Uploading..." : "Upload Photo"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Trial Video</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Record a short intro video · Max 50MB</p>
+              </div>
+              {profile.trial_video_url ? (
+                <div className="space-y-3">
+                  <video src={profile.trial_video_url} controls className="w-full rounded-xl border border-border max-h-48 bg-black" />
+                  <input ref={videoInputRef} type="file" accept="video/*" onChange={uploadVideo} className="hidden" />
+                  <Button size="sm" variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploadingVideo}>
+                    <Video className="mr-2 h-3 w-3" />
+                    {uploadingVideo ? "Uploading..." : "Replace Video"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                  <Video className="mx-auto h-10 w-10 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground mb-3">No trial video yet. Upload one so peers can decide if they want to learn from you!</p>
+                  <input ref={videoInputRef} type="file" accept="video/*" onChange={uploadVideo} className="hidden" />
+                  <Button size="sm" className="bg-gradient-primary text-primary-foreground hover:opacity-90" onClick={() => videoInputRef.current?.click()} disabled={uploadingVideo}>
+                    <Upload className="mr-2 h-3 w-3" />
+                    {uploadingVideo ? "Uploading..." : "Upload Trial Video"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader><CardTitle>Basic Info</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -101,56 +207,4 @@ export default function Profile() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Your Skills</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => setShowAddSkill(!showAddSkill)}>
-              {showAddSkill ? <X className="mr-1 h-3 w-3" /> : <Plus className="mr-1 h-3 w-3" />}
-              {showAddSkill ? "Cancel" : "Add Skill"}
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {showAddSkill && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-3 p-4 bg-muted rounded-lg">
-                <Input placeholder="Skill name (e.g. React, Piano, Spanish)" value={newSkill.name} onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })} />
-                <div className="grid grid-cols-2 gap-3">
-                  <Select value={newSkill.skill_type} onValueChange={(v) => setNewSkill({ ...newSkill, skill_type: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="offered">I can teach</SelectItem>
-                      <SelectItem value="wanted">I want to learn</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={newSkill.category} onValueChange={(v) => setNewSkill({ ...newSkill, category: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={addSkill} size="sm" className="bg-gradient-primary text-primary-foreground hover:opacity-90">Add Skill</Button>
-              </motion.div>
-            )}
-
-            {[{ title: "Skills I Offer", items: offered, type: "offered" }, { title: "Skills I Want", items: wanted, type: "wanted" }].map(({ title, items, type }) => (
-              <div key={type}>
-                <h4 className="text-sm font-medium text-muted-foreground mb-2">{title}</h4>
-                {items.length === 0 ? (
-                  <p className="text-sm text-muted-foreground/50">No skills added yet</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {items.map((s) => (
-                      <Badge key={s.id} variant={type === "offered" ? "default" : "secondary"} className="gap-1">
-                        {s.name}
-                        <button onClick={() => removeSkill(s.id)} className="ml-1 hover:text-destructive">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    </AppLayout>
-  );
-}
+            <Button size="sm" variant="out
