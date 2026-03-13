@@ -111,7 +111,7 @@ export default function VideoCall() {
 
       // Clean up signaling data
       if (roomId) {
-        await supabase.from("signaling").delete().eq("room_id", roomId);
+        await (supabase.from("signaling") as any).delete().eq("room_id", roomId);
       }
     }
     navigate("/sessions");
