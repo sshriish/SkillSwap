@@ -23,12 +23,13 @@ export default function VideoCall() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  const isScreenSharingRef = useRef(false);
 
   const { remoteVideoRef, connectionState, isConnected, replaceTrack, cleanup: cleanupWebRTC } =
     useWebRTC({ roomId, userId: user?.id, localStream });
 
-  // Start local media
   useEffect(() => {
     const startMedia = async () => {
       try {
@@ -36,9 +37,10 @@ export default function VideoCall() {
         setLocalStream(stream);
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
       } catch {
-        toast.error("Could not access camera/microphone");
+        toast.error("Could not access camera/microphone. Please check your browser permissions.");
       }
     };
+
     startMedia();
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
 
@@ -47,7 +49,6 @@ export default function VideoCall() {
     };
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       localStream?.getTracks().forEach((t) => t.stop());
@@ -57,43 +58,48 @@ export default function VideoCall() {
   const toggleMute = () => {
     if (localStream) {
       localStream.getAudioTracks().forEach((t) => (t.enabled = !t.enabled));
-      setIsMuted(!isMuted);
+      setIsMuted((prev) => !prev);
     }
   };
 
   const toggleCamera = () => {
     if (localStream) {
       localStream.getVideoTracks().forEach((t) => (t.enabled = !t.enabled));
-      setIsCameraOff(!isCameraOff);
+      setIsCameraOff((prev) => !prev);
     }
   };
 
-  const toggleScreenShare = async () => {
-    if (isScreenSharing) {
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharingRef.current) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-        stream.getVideoTracks().forEach((t) => replaceTrack(t));
-        stream.getAudioTracks().forEach((t) => replaceTrack(t));
+        localStream?.getTracks().forEach((t) => t.stop());
+        const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setLocalStream(camStream);
+        if (localVideoRef.current) localVideoRef.current.srcObject = camStream;
+        camStream.getVideoTracks().forEach((t) => replaceTrack(t));
+        camStream.getAudioTracks().forEach((t) => replaceTrack(t));
+        isScreenSharingRef.current = false;
         setIsScreenSharing(false);
       } catch {
-        toast.error("Could not revert to camera");
+        toast.error("Could not switch back to camera.");
       }
     } else {
       try {
-        const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         localStream?.getVideoTracks().forEach((t) => t.stop());
-        if (localVideoRef.current) localVideoRef.current.srcObject = screen;
-        screen.getVideoTracks().forEach((t) => replaceTrack(t));
-        setLocalStream(screen);
+        if (localVideoRef.current) localVideoRef.current.srcObject = screenStream;
+        screenStream.getVideoTracks().forEach((t) => replaceTrack(t));
+        setLocalStream(screenStream);
+        isScreenSharingRef.current = true;
         setIsScreenSharing(true);
-        screen.getVideoTracks()[0].onended = () => toggleScreenShare();
+        screenStream.getVideoTracks()[0].onended = () => {
+          if (isScreenSharingRef.current) toggleScreenShare();
+        };
       } catch {
         // User cancelled
       }
     }
-  };
+  }, [localStream, replaceTrack]);
 
   const endCall = async () => {
     localStream?.getTracks().forEach((t) => t.stop());
@@ -102,18 +108,21 @@ export default function VideoCall() {
 
     if (sessionId) {
       const minutes = Math.floor(elapsed / 60);
-      await supabase.from("sessions").update({
-        status: "completed",
-        ended_at: new Date().toISOString(),
-        duration_minutes: minutes,
-        credits_transferred: minutes >= 5 ? 1 : 0,
-      }).eq("id", sessionId);
+      await supabase
+        .from("sessions")
+        .update({
+          status: "completed",
+          ended_at: new Date().toISOString(),
+          duration_minutes: minutes,
+          credits_transferred: minutes >= 5 ? 1 : 0,
+        })
+        .eq("id", sessionId);
 
-      // Clean up signaling data
       if (roomId) {
         await (supabase.from("signaling") as any).delete().eq("room_id", roomId);
       }
     }
+
     navigate("/sessions");
     toast.success("Call ended");
   };
@@ -123,20 +132,19 @@ export default function VideoCall() {
 
   const connectionLabel = () => {
     switch (connectionState) {
-      case "connected": return "Connected";
-      case "connecting": return "Connecting...";
+      case "connected":    return "Connected";
+      case "connecting":   return "Connecting...";
       case "disconnected": return "Reconnecting...";
-      case "failed": return "Connection failed";
-      default: return "Waiting for peer...";
+      case "failed":       return "Connection failed — check your network";
+      default:             return "Waiting for peer...";
     }
   };
 
   return (
     <div className="fixed inset-0 bg-foreground flex flex-col">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 bg-foreground/90">
         <div className="flex items-center gap-3">
-          <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-primary" : "bg-muted-foreground"} animate-pulse`} />
+          <div className={`h-2 w-2 rounded-full animate-pulse ${isConnected ? "bg-primary" : "bg-muted-foreground"}`} />
           <span className="text-sm font-medium text-primary-foreground/80">
             {connectionLabel()}
           </span>
@@ -152,18 +160,15 @@ export default function VideoCall() {
         </div>
       </div>
 
-      {/* Video area */}
       <div className="flex-1 relative flex items-center justify-center p-4">
-        {/* Remote video */}
         <div className="w-full max-w-4xl aspect-video bg-card/10 rounded-2xl overflow-hidden border border-primary-foreground/10">
-          {isConnected ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
-          ) : (
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className={`w-full h-full object-cover ${isConnected ? "block" : "hidden"}`}
+          />
+          {!isConnected && (
             <div className="w-full h-full flex items-center justify-center">
               <div className="text-center text-primary-foreground/40">
                 <Camera className="mx-auto h-12 w-12 mb-2" />
@@ -176,7 +181,6 @@ export default function VideoCall() {
           )}
         </div>
 
-        {/* Local video (PiP) */}
         <div className="absolute bottom-8 right-8 w-48 aspect-video rounded-xl overflow-hidden border-2 border-primary/50 shadow-lg">
           <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           {isCameraOff && (
@@ -186,7 +190,6 @@ export default function VideoCall() {
           )}
         </div>
 
-        {/* Chat panel */}
         <AnimatePresence>
           {chatOpen && sessionId && user && (
             <ChatPanel sessionId={sessionId} userId={user.id} onClose={() => setChatOpen(false)} />
@@ -194,7 +197,6 @@ export default function VideoCall() {
         </AnimatePresence>
       </div>
 
-      {/* Controls */}
       <VideoControls
         isMuted={isMuted}
         isCameraOff={isCameraOff}
@@ -203,7 +205,7 @@ export default function VideoCall() {
         onToggleMute={toggleMute}
         onToggleCamera={toggleCamera}
         onToggleScreenShare={toggleScreenShare}
-        onToggleChat={() => setChatOpen(!chatOpen)}
+        onToggleChat={() => setChatOpen((prev) => !prev)}
         onEndCall={endCall}
       />
     </div>
