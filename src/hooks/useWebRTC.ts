@@ -40,7 +40,7 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
 
     pc.onicecandidate = async (event) => {
       if (event.candidate && roomId) {
-        await supabase.from("signaling").insert({
+        await (supabase.from("signaling") as any).insert({
           room_id: roomId,
           sender_id: userId,
           type: "ice-candidate",
