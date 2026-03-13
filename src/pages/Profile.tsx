@@ -24,7 +24,6 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
-
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,10 +90,7 @@ export default function Profile() {
 
   const saveProfile = async () => {
     setSaving(true);
-    const { error } = await supabase.from("profiles").update({
-      display_name: profile.display_name,
-      bio: profile.bio,
-    }).eq("user_id", user!.id);
+    const { error } = await supabase.from("profiles").update({ display_name: profile.display_name, bio: profile.bio }).eq("user_id", user!.id);
     if (error) toast.error(error.message);
     else toast.success("Profile updated!");
     setSaving(false);
@@ -133,7 +129,6 @@ export default function Profile() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-3xl font-display font-bold">Your Profile</h1>
         </motion.div>
-
         <Card>
           <CardHeader><CardTitle>Profile Media</CardTitle></CardHeader>
           <CardContent className="space-y-6">
@@ -157,7 +152,6 @@ export default function Profile() {
                 </Button>
               </div>
             </div>
-
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium">Trial Video</p>
@@ -186,7 +180,6 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader><CardTitle>Basic Info</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -203,8 +196,58 @@ export default function Profile() {
             </Button>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Your Skills</CardTitle>
-            <Button size="sm" variant="out
+            <Button size="sm" variant="outline" onClick={() => setShowAddSkill(!showAddSkill)}>
+              {showAddSkill ? <X className="mr-1 h-3 w-3" /> : <Plus className="mr-1 h-3 w-3" />}
+              {showAddSkill ? "Cancel" : "Add Skill"}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {showAddSkill && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-3 p-4 bg-muted rounded-lg">
+                <Input placeholder="Skill name (e.g. React, Piano, Spanish)" value={newSkill.name} onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })} />
+                <div className="grid grid-cols-2 gap-3">
+                  <Select value={newSkill.skill_type} onValueChange={(v) => setNewSkill({ ...newSkill, skill_type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="offered">I can teach</SelectItem>
+                      <SelectItem value="wanted">I want to learn</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={newSkill.category} onValueChange={(v) => setNewSkill({ ...newSkill, category: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={addSkill} size="sm" className="bg-gradient-primary text-primary-foreground hover:opacity-90">Add Skill</Button>
+              </motion.div>
+            )}
+            {[{ title: "Skills I Offer", items: offered, type: "offered" }, { title: "Skills I Want", items: wanted, type: "wanted" }].map(({ title, items, type }) => (
+              <div key={type}>
+                <h4 className="text-sm font-medium text-muted-foreground mb-2">{title}</h4>
+                {items.length === 0 ? (
+                  <p className="text-sm text-muted-foreground/50">No skills added yet</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {items.map((s) => (
+                      <Badge key={s.id} variant={type === "offered" ? "default" : "secondary"} className="gap-1">
+                        {s.name}
+                        <button onClick={() => removeSkill(s.id)} className="ml-1 hover:text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </AppLayout>
+  );
+}
