@@ -1,12 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
+const buildIceServers = (): RTCIceServer[] => {
+  const servers: RTCIceServer[] = [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-  ],
+  ];
+
+  const turnUrl = import.meta.env.VITE_TURN_URL;
+  const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+  const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    servers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential });
+    servers.push({
+      urls: turnUrl.replace("turn:", "turns:").replace(":80", ":443"),
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return servers;
 };
 
 interface UseWebRTCOptions {
@@ -21,9 +35,46 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [connectionState, setConnectionState] = useState<string>("new");
   const [isConnected, setIsConnected] = useState(false);
+
   const makingOffer = useRef(false);
   const ignoreOffer = useRef(false);
   const polite = useRef(false);
+
+  const handleSignal = useCallback(
+    async (signal: { type: string; payload: any }, pc: RTCPeerConnection | null) => {
+      if (!pc) return;
+      try {
+        if (signal.type === "offer") {
+          const offerCollision = makingOffer.current || pc.signalingState !== "stable";
+          ignoreOffer.current = !polite.current && offerCollision;
+          if (ignoreOffer.current) return;
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
+          await pc.setLocalDescription();
+          if (roomId && userId) {
+            await (supabase.from("signaling") as any).insert({
+              room_id: roomId,
+              sender_id: userId,
+              type: "answer",
+              payload: pc.localDescription!.toJSON(),
+            });
+          }
+        } else if (signal.type === "answer") {
+          if (pc.signalingState === "have-local-offer") {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
+          }
+        } else if (signal.type === "ice-candidate") {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.payload));
+          } catch (err) {
+            if (!ignoreOffer.current) console.error("[WebRTC] ICE candidate error:", err);
+          }
+        }
+      } catch (err) {
+        console.error("[WebRTC] Signal handling error:", err);
+      }
+    },
+    [roomId, userId]
+  );
 
   const cleanup = useCallback(() => {
     peerConnection.current?.close();
@@ -36,7 +87,7 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
   const createPeerConnection = useCallback(() => {
     if (!roomId || !userId) return null;
 
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+    const pc = new RTCPeerConnection({ iceServers: buildIceServers() });
 
     pc.onicecandidate = async (event) => {
       if (event.candidate && roomId) {
@@ -85,7 +136,7 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
           payload: pc.localDescription!.toJSON(),
         });
       } catch (err) {
-        console.error("Negotiation error:", err);
+        console.error("[WebRTC] Negotiation error:", err);
       } finally {
         makingOffer.current = false;
       }
@@ -95,12 +146,10 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
     return pc;
   }, [roomId, userId]);
 
-  // Add local tracks to peer connection
   useEffect(() => {
     if (!localStream || !peerConnection.current) return;
     const pc = peerConnection.current;
     const senders = pc.getSenders();
-
     localStream.getTracks().forEach((track) => {
       const existingSender = senders.find((s) => s.track?.kind === track.kind);
       if (existingSender) {
@@ -111,33 +160,24 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
     });
   }, [localStream]);
 
-  // Initialize WebRTC and listen for signaling
   useEffect(() => {
     if (!roomId || !userId || !localStream) return;
 
     const pc = createPeerConnection();
     if (!pc) return;
 
-    // Add tracks
-    localStream.getTracks().forEach((track) => {
-      pc.addTrack(track, localStream);
-    });
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
-    // Determine politeness by checking if there are existing signals
     const init = async () => {
-      const { data: existing } = await (supabase
-        .from("signaling") as any)
+      const { data: existing } = await (supabase.from("signaling") as any)
         .select("sender_id")
         .eq("room_id", roomId)
         .neq("sender_id", userId)
         .limit(1);
 
-      // If someone else already sent signals, we're the polite peer
       polite.current = (existing?.length ?? 0) > 0;
 
-      // Load existing signals
-      const { data: signals } = await (supabase
-        .from("signaling") as any)
+      const { data: signals } = await (supabase.from("signaling") as any)
         .select("*")
         .eq("room_id", roomId)
         .neq("sender_id", userId)
@@ -152,7 +192,6 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
 
     init();
 
-    // Listen for new signals in realtime
     const channel = supabase
       .channel(`signaling-${roomId}`)
       .on(
@@ -175,57 +214,14 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
       supabase.removeChannel(channel);
       cleanup();
     };
-  }, [roomId, userId, localStream, createPeerConnection, cleanup]);
+  }, [roomId, userId, localStream, createPeerConnection, handleSignal, cleanup]);
 
-  const handleSignal = async (
-    signal: { type: string; payload: any },
-    pc: RTCPeerConnection | null
-  ) => {
+  const replaceTrack = useCallback((newTrack: MediaStreamTrack) => {
+    const pc = peerConnection.current;
     if (!pc) return;
-
-    try {
-      if (signal.type === "offer") {
-        const offerCollision =
-          makingOffer.current || pc.signalingState !== "stable";
-        ignoreOffer.current = !polite.current && offerCollision;
-        if (ignoreOffer.current) return;
-
-        await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-        await pc.setLocalDescription();
-
-        if (roomId && userId) {
-          await (supabase.from("signaling") as any).insert({
-            room_id: roomId,
-            sender_id: userId,
-            type: "answer",
-            payload: pc.localDescription!.toJSON(),
-          });
-        }
-      } else if (signal.type === "answer") {
-        if (pc.signalingState === "have-local-offer") {
-          await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-        }
-      } else if (signal.type === "ice-candidate") {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.payload));
-        } catch (err) {
-          if (!ignoreOffer.current) console.error("ICE candidate error:", err);
-        }
-      }
-    } catch (err) {
-      console.error("Signal handling error:", err);
-    }
-  };
-
-  const replaceTrack = useCallback(
-    (newTrack: MediaStreamTrack) => {
-      const pc = peerConnection.current;
-      if (!pc) return;
-      const sender = pc.getSenders().find((s) => s.track?.kind === newTrack.kind);
-      if (sender) sender.replaceTrack(newTrack);
-    },
-    []
-  );
+    const sender = pc.getSenders().find((s) => s.track?.kind === newTrack.kind);
+    if (sender) sender.replaceTrack(newTrack);
+  }, []);
 
   return {
     remoteStream,
