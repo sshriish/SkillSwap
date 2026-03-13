@@ -125,8 +125,8 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
 
     // Determine politeness by checking if there are existing signals
     const init = async () => {
-      const { data: existing } = await supabase
-        .from("signaling")
+      const { data: existing } = await (supabase
+        .from("signaling") as any)
         .select("sender_id")
         .eq("room_id", roomId)
         .neq("sender_id", userId)
