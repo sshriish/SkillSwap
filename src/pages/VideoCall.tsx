@@ -136,7 +136,7 @@ export default function VideoCall() {
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 bg-foreground/90">
         <div className="flex items-center gap-3">
-          <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500" : "bg-primary"} animate-pulse`} />
+          <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-primary" : "bg-muted-foreground"} animate-pulse`} />
           <span className="text-sm font-medium text-primary-foreground/80">
             {connectionLabel()}
           </span>
