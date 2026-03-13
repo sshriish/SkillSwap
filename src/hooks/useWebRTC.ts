@@ -136,8 +136,8 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
       polite.current = (existing?.length ?? 0) > 0;
 
       // Load existing signals
-      const { data: signals } = await supabase
-        .from("signaling")
+      const { data: signals } = await (supabase
+        .from("signaling") as any)
         .select("*")
         .eq("room_id", roomId)
         .neq("sender_id", userId)
