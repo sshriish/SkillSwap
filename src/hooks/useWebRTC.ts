@@ -78,7 +78,7 @@ export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
       try {
         makingOffer.current = true;
         await pc.setLocalDescription();
-        await supabase.from("signaling").insert({
+        await (supabase.from("signaling") as any).insert({
           room_id: roomId,
           sender_id: userId,
           type: "offer",
