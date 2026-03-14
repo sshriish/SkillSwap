@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { Repeat, ArrowRight, Video, CreditCard, Users, Star, Monitor, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const features = [
   { icon: Video, title: "Live Video Sessions", desc: "HD video calls with screen sharing for immersive learning." },
@@ -13,6 +15,24 @@ const features = [
 ];
 
 export default function Landing() {
+  const [stats, setStats] = useState({ users: 0, sessions: 0, skills: 0 });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const [usersRes, sessionsRes, skillsRes] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact" }),
+        supabase.from("sessions").select("id", { count: "exact" }),
+        supabase.from("skills").select("id", { count: "exact" }),
+      ]);
+      setStats({
+        users: usersRes.count ?? 0,
+        sessions: sessionsRes.count ?? 0,
+        skills: skillsRes.count ?? 0,
+      });
+    };
+    fetchStats();
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
@@ -51,6 +71,38 @@ export default function Landing() {
             </Link>
           </div>
         </motion.div>
+      </section>
+
+      {/* Live Stats */}
+      <section className="px-6 lg:px-16 py-10">
+        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            { label: "People Learning", value: stats.users, icon: Users, suffix: "+" },
+            { label: "Sessions Completed", value: stats.sessions, icon: Video, suffix: "+" },
+            { label: "Skills Available", value: stats.skills, icon: Star, suffix: "+" },
+          ].map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className="flex flex-col items-center justify-center p-6 bg-card rounded-2xl border border-border shadow-sm"
+            >
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                <stat.icon className="h-5 w-5 text-primary" />
+              </div>
+              <motion.p
+                className="text-4xl font-display font-bold text-primary"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 + i * 0.1 }}
+              >
+                {stat.value}{stat.suffix}
+              </motion.p>
+              <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
+            </motion.div>
+          ))}
+        </div>
       </section>
 
       {/* Features */}
