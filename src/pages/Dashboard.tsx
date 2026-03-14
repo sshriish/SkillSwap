@@ -8,25 +8,44 @@ import { motion } from "framer-motion";
 import { CreditCard, Calendar, Star, Users, ArrowRight, Video, CheckCircle, Circle, Trophy } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 
+const ALL_BADGES = [
+  { id: "first_signup", icon: "🎉", label: "Welcome!", desc: "Joined SkillSwap", condition: () => true },
+  { id: "profile_complete", icon: "✅", label: "All Set", desc: "Completed your profile 100%", condition: (data: any) => data.completionPercent === 100 },
+  { id: "first_skill", icon: "🧠", label: "Skilled", desc: "Added your first skill", condition: (data: any) => data.skillCount >= 1 },
+  { id: "five_skills", icon: "🎯", label: "Multi-Talent", desc: "Added 5 or more skills", condition: (data: any) => data.skillCount >= 5 },
+  { id: "first_session", icon: "🤝", label: "First Handshake", desc: "Completed your first session", condition: (data: any) => data.completedSessions >= 1 },
+  { id: "five_sessions", icon: "🔥", label: "On Fire", desc: "Completed 5 sessions", condition: (data: any) => data.completedSessions >= 5 },
+  { id: "ten_sessions", icon: "💎", label: "Diamond Learner", desc: "Completed 10 sessions", condition: (data: any) => data.completedSessions >= 10 },
+  { id: "top_teacher", icon: "🏆", label: "Top Teacher", desc: "Taught 3 or more sessions", condition: (data: any) => data.taughtSessions >= 3 },
+  { id: "rich", icon: "💰", label: "Credit Rich", desc: "Earned 20+ credits", condition: (data: any) => data.credits >= 20 },
+  { id: "has_video", icon: "🎬", label: "On Camera", desc: "Uploaded a trial video", condition: (data: any) => !!data.trialVideo },
+];
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [sessionCount, setSessionCount] = useState(0);
   const [skillCount, setSkillCount] = useState(0);
   const [topSkills, setTopSkills] = useState<{ name: string; count: number }[]>([]);
+  const [completedSessions, setCompletedSessions] = useState(0);
+  const [taughtSessions, setTaughtSessions] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [profileRes, sessionsRes, skillsRes, allSkillsRes] = await Promise.all([
+      const [profileRes, sessionsRes, skillsRes, allSkillsRes, completedRes, taughtRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("user_id", user.id).single(),
         supabase.from("sessions").select("id", { count: "exact" }).or(`teacher_id.eq.${user.id},learner_id.eq.${user.id}`),
         supabase.from("skills").select("id", { count: "exact" }).eq("user_id", user.id),
         supabase.from("skills").select("name, skill_type").eq("skill_type", "offered"),
+        supabase.from("sessions").select("id", { count: "exact" }).eq("status", "completed").or(`teacher_id.eq.${user.id},learner_id.eq.${user.id}`),
+        supabase.from("sessions").select("id", { count: "exact" }).eq("teacher_id", user.id).eq("status", "completed"),
       ]);
       if (profileRes.data) setProfile(profileRes.data);
       setSessionCount(sessionsRes.count ?? 0);
       setSkillCount(skillsRes.count ?? 0);
+      setCompletedSessions(completedRes.count ?? 0);
+      setTaughtSessions(taughtRes.count ?? 0);
       if (allSkillsRes.data) {
         const countMap: Record<string, number> = {};
         for (const s of allSkillsRes.data) {
@@ -54,6 +73,18 @@ export default function Dashboard() {
   const completedCount = completionSteps.filter((s) => s.done).length;
   const completionPercent = Math.round((completedCount / completionSteps.length) * 100);
 
+  const badgeData = {
+    completionPercent,
+    skillCount,
+    completedSessions,
+    taughtSessions,
+    credits: profile?.credits ?? 0,
+    trialVideo: (profile as any)?.trial_video_url,
+  };
+
+  const earnedBadges = ALL_BADGES.filter((b) => b.condition(badgeData));
+  const lockedBadges = ALL_BADGES.filter((b) => !b.condition(badgeData));
+
   const stats = [
     { label: "Credits", value: profile?.credits ?? 0, icon: CreditCard, color: "text-primary" },
     { label: "Sessions", value: sessionCount, icon: Calendar, color: "text-accent" },
@@ -72,6 +103,7 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-1">Here's what's happening with your skill exchanges.</p>
         </motion.div>
 
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {stats.map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
@@ -90,8 +122,66 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* Badge System */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-yellow-500" />
+                Your Badges
+                <span className="ml-auto text-sm font-normal text-muted-foreground">
+                  {earnedBadges.length}/{ALL_BADGES.length} earned
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Earned badges */}
+              {earnedBadges.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-3">Earned 🎉</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {earnedBadges.map((badge, i) => (
+                      <motion.div
+                        key={badge.id}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="flex flex-col items-center gap-1.5 p-3 bg-primary/5 border border-primary/20 rounded-xl text-center"
+                      >
+                        <span className="text-3xl">{badge.icon}</span>
+                        <p className="text-xs font-semibold text-primary">{badge.label}</p>
+                        <p className="text-xs text-muted-foreground leading-tight">{badge.desc}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Locked badges */}
+              {lockedBadges.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-3">Locked 🔒</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {lockedBadges.map((badge) => (
+                      <div
+                        key={badge.id}
+                        className="flex flex-col items-center gap-1.5 p-3 bg-muted/50 border border-border rounded-xl text-center opacity-50"
+                      >
+                        <span className="text-3xl grayscale">{badge.icon}</span>
+                        <p className="text-xs font-semibold text-muted-foreground">{badge.label}</p>
+                        <p className="text-xs text-muted-foreground leading-tight">{badge.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Profile Completion + Leaderboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
             <Card className="h-full">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center justify-between">
@@ -138,7 +228,7 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
             <Card className="h-full">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -182,6 +272,7 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
+        {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="hover:shadow-md transition-shadow">
             <CardContent className="p-6">
@@ -220,4 +311,4 @@ export default function Dashboard() {
       </div>
     </AppLayout>
   );
-}
+      }
