@@ -2,19 +2,10 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
-  LayoutDashboard,
-  Users,
-  Calendar,
-  Video,
-  CreditCard,
-  Star,
-  Settings,
-  LogOut,
-  Repeat,
-  Menu,
-  X,
+  LayoutDashboard, Users, Calendar, CreditCard,
+  Settings, LogOut, Repeat, Menu, X, Moon, Sun,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -28,6 +19,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  // Load saved theme on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark") {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    }
+  }, []);
+
+  const toggleDark = () => {
+    if (isDark) {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+      setIsDark(false);
+    } else {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+      setIsDark(true);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -62,7 +75,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-border space-y-1">
+            {/* Dark mode toggle */}
+            <button
+              onClick={toggleDark}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full"
+            >
+              {isDark ? (
+                <>
+                  <Sun className="h-4 w-4" /> Light Mode
+                </>
+              ) : (
+                <>
+                  <Moon className="h-4 w-4" /> Dark Mode
+                </>
+              )}
+            </button>
+
             <Button variant="ghost" className="w-full justify-start text-muted-foreground" onClick={signOut}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign Out
