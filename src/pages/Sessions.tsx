@@ -5,9 +5,10 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
-import { Calendar, Video, Check, X, Clock } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Calendar, Video, Check, X, Clock, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const statusColors: Record<string, string> = {
@@ -23,6 +24,12 @@ export default function Sessions() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [reviewingSession, setReviewingSession] = useState<any | null>(null);
+  const [rating, setRating] = useState(0);
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [existingReviews, setExistingReviews] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,6 +50,20 @@ export default function Sessions() {
           profs.forEach((p) => (map[p.user_id] = p.display_name));
           setProfiles(map);
         }
+
+        const completedIds = data.filter((s) => s.status === "completed").map((s) => s.id);
+        if (completedIds.length > 0) {
+          const { data: reviews } = await supabase
+            .from("reviews")
+            .select("session_id")
+            .eq("reviewer_id", user.id)
+            .in("session_id", completedIds);
+          if (reviews) {
+            const reviewed: Record<string, boolean> = {};
+            reviews.forEach((r) => (reviewed[r.session_id] = true));
+            setExistingReviews(reviewed);
+          }
+        }
       }
       setLoading(false);
     };
@@ -62,6 +83,32 @@ export default function Sessions() {
 
   const joinCall = (session: any) => {
     navigate(`/call/${session.id}?room=${session.room_id}`);
+  };
+
+  const submitReview = async () => {
+    if (!rating || !reviewingSession || !user) return;
+    setSubmittingReview(true);
+    try {
+      const isTeacher = reviewingSession.teacher_id === user.id;
+      const revieweeId = isTeacher ? reviewingSession.learner_id : reviewingSession.teacher_id;
+      const { error } = await supabase.from("reviews").insert({
+        session_id: reviewingSession.id,
+        reviewer_id: user.id,
+        reviewee_id: revieweeId,
+        rating,
+        comment,
+      });
+      if (error) throw error;
+      setExistingReviews((prev) => ({ ...prev, [reviewingSession.id]: true }));
+      toast.success("Review submitted! ⭐");
+      setReviewingSession(null);
+      setRating(0);
+      setComment("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit review");
+    } finally {
+      setSubmittingReview(false);
+    }
   };
 
   return (
@@ -86,6 +133,7 @@ export default function Sessions() {
             {sessions.map((s, i) => {
               const isTeacher = s.teacher_id === user!.id;
               const otherName = profiles[isTeacher ? s.learner_id : s.teacher_id] || "Unknown";
+              const alreadyReviewed = existingReviews[s.id];
               return (
                 <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                   <Card>
@@ -96,11 +144,11 @@ export default function Sessions() {
                           <Badge className={`text-xs ${statusColors[s.status] || ""}`} variant="outline">{s.status}</Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {isTeacher ? "You're teaching" : "You're learning"} · 
+                          {isTeacher ? "You're teaching" : "You're learning"} ·
                           {s.duration_minutes ? ` ${s.duration_minutes} min` : " Duration TBD"}
                         </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap justify-end">
                         {s.status === "pending" && isTeacher && (
                           <>
                             <Button size="sm" variant="outline" onClick={() => updateStatus(s.id, "cancelled")}><X className="h-3 w-3" /></Button>
@@ -117,6 +165,16 @@ export default function Sessions() {
                         {s.status === "pending" && !isTeacher && (
                           <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" /> Waiting</Badge>
                         )}
+                        {s.status === "completed" && !alreadyReviewed && (
+                          <Button size="sm" variant="outline" onClick={() => setReviewingSession(s)} className="gap-1 border-yellow-400 text-yellow-500 hover:bg-yellow-50">
+                            <Star className="h-3 w-3" /> Rate Session
+                          </Button>
+                        )}
+                        {s.status === "completed" && alreadyReviewed && (
+                          <Badge variant="secondary" className="gap-1 text-xs">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" /> Reviewed
+                          </Badge>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -126,6 +184,58 @@ export default function Sessions() {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {reviewingSession && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+            onClick={() => setReviewingSession(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-card rounded-2xl p-6 w-full max-w-md shadow-xl space-y-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h2 className="text-xl font-display font-bold">Rate this session</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  How was your session with {profiles[reviewingSession.teacher_id === user?.id ? reviewingSession.learner_id : reviewingSession.teacher_id]}?
+                </p>
+              </div>
+              <div className="flex items-center gap-2 justify-center">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    onMouseEnter={() => setHoveredRating(star)}
+                    onMouseLeave={() => setHoveredRating(0)}
+                    className="transition-transform hover:scale-110"
+                  >
+                    <Star className={`h-10 w-10 transition-colors ${star <= (hoveredRating || rating) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`} />
+                  </button>
+                ))}
+              </div>
+              {rating > 0 && (
+                <p className="text-center text-sm font-medium text-primary">
+                  {rating === 1 ? "😞 Poor" : rating === 2 ? "😐 Fair" : rating === 3 ? "🙂 Good" : rating === 4 ? "😊 Great" : "🤩 Excellent!"}
+                </p>
+              )}
+              <Textarea placeholder="Leave a comment (optional)..." value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => setReviewingSession(null)}>Cancel</Button>
+                <Button className="flex-1 bg-gradient-primary text-primary-foreground hover:opacity-90" onClick={submitReview} disabled={!rating || submittingReview}>
+                  {submittingReview ? "Submitting..." : "Submit Review ⭐"}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AppLayout>
   );
 }
