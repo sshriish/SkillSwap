@@ -17,12 +17,3 @@ export default defineConfig({
     },
   },
 });
-```
-
----
-
-**Fix 2 — `package.json`**
-
-Go to `package.json` → ✏️ pencil → find this line:
-```
-"lovable-tagger": "^1.1.13",
