@@ -48,12 +48,17 @@ export default function Profile() {
     setUploadingAvatar(true);
     try {
       const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from("avatars").upload(fileName, file, { upsert: true });
+      const fileName = `public/${user.id}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
       const avatarUrl = data.publicUrl;
-      const { error: updateError } = await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("user_id", user.id);
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl })
+        .eq("user_id", user.id);
       if (updateError) throw updateError;
       setProfile((prev) => ({ ...prev, avatar_url: avatarUrl }));
       toast.success("Profile picture updated!");
@@ -72,12 +77,17 @@ export default function Profile() {
     setUploadingVideo(true);
     try {
       const fileExt = file.name.split(".").pop();
-      const fileName = `${user.id}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from("trial-videos").upload(fileName, file, { upsert: true });
+      const fileName = `public/${user.id}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from("trial-videos")
+        .upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("trial-videos").getPublicUrl(fileName);
       const videoUrl = data.publicUrl;
-      const { error: updateError } = await supabase.from("profiles").update({ trial_video_url: videoUrl }).eq("user_id", user.id);
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ trial_video_url: videoUrl })
+        .eq("user_id", user.id);
       if (updateError) throw updateError;
       setProfile((prev) => ({ ...prev, trial_video_url: videoUrl }));
       toast.success("Trial video uploaded!");
@@ -90,7 +100,10 @@ export default function Profile() {
 
   const saveProfile = async () => {
     setSaving(true);
-    const { error } = await supabase.from("profiles").update({ display_name: profile.display_name, bio: profile.bio }).eq("user_id", user!.id);
+    const { error } = await supabase.from("profiles").update({
+      display_name: profile.display_name,
+      bio: profile.bio,
+    }).eq("user_id", user!.id);
     if (error) toast.error(error.message);
     else toast.success("Profile updated!");
     setSaving(false);
@@ -129,6 +142,7 @@ export default function Profile() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-3xl font-display font-bold">Your Profile</h1>
         </motion.div>
+
         <Card>
           <CardHeader><CardTitle>Profile Media</CardTitle></CardHeader>
           <CardContent className="space-y-6">
@@ -152,6 +166,7 @@ export default function Profile() {
                 </Button>
               </div>
             </div>
+
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium">Trial Video</p>
@@ -180,6 +195,7 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader><CardTitle>Basic Info</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -196,6 +212,7 @@ export default function Profile() {
             </Button>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Your Skills</CardTitle>
