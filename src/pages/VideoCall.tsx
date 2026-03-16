@@ -24,7 +24,6 @@ export default function VideoCall() {
   const [elapsed, setElapsed] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-
   const isScreenSharingRef = useRef(false);
 
   const { remoteVideoRef, connectionState, isConnected, replaceTrack, cleanup: cleanupWebRTC } =
@@ -40,19 +39,13 @@ export default function VideoCall() {
         toast.error("Could not access camera/microphone. Please check your browser permissions.");
       }
     };
-
     startMedia();
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-
-    return () => {
-      clearInterval(timerRef.current);
-    };
+    return () => { clearInterval(timerRef.current); };
   }, []);
 
   useEffect(() => {
-    return () => {
-      localStream?.getTracks().forEach((t) => t.stop());
-    };
+    return () => { localStream?.getTracks().forEach((t) => t.stop()); };
   }, [localStream]);
 
   const toggleMute = () => {
@@ -107,14 +100,15 @@ export default function VideoCall() {
     cleanupWebRTC();
 
     if (sessionId) {
-      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed;
+      const minutes = Math.floor(seconds / 60);
       await supabase
         .from("sessions")
         .update({
           status: "completed",
           ended_at: new Date().toISOString(),
           duration_minutes: minutes,
-          credits_transferred: minutes >= 5 ? 1 : 0,
+          credits_transferred: seconds >= 10 ? 1 : 0,
         })
         .eq("id", sessionId);
 
@@ -145,9 +139,7 @@ export default function VideoCall() {
       <div className="flex items-center justify-between px-6 py-3 bg-foreground/90">
         <div className="flex items-center gap-3">
           <div className={`h-2 w-2 rounded-full animate-pulse ${isConnected ? "bg-primary" : "bg-muted-foreground"}`} />
-          <span className="text-sm font-medium text-primary-foreground/80">
-            {connectionLabel()}
-          </span>
+          <span className="text-sm font-medium text-primary-foreground/80">{connectionLabel()}</span>
           {isConnected ? (
             <Wifi className="h-3.5 w-3.5 text-primary" />
           ) : (
