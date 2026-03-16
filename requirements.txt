@@ -1,16 +1,28 @@
-React 18.3.1
-TypeScript 5.8.3
-Vite 5.4.19
-Tailwind CSS 3.4.17
-Supabase JS 2.98.0
-React Router DOM 6.30.1
-Framer Motion 12.34.3
-TanStack React Query 5.83.0
-Lucide React 0.462.0
-Shadcn UI (Radix UI components)
-Sonner 1.7.4
-Zod 3.25.76
-React Hook Form 7.61.1
-Recharts 2.15.4
-WebRTC (Browser Native)
-Metered TURN Server
+# SkillSwap — Project Dependencies
+
+# Frontend
+react==18.3.1
+typescript==5.8.3
+vite==5.4.19
+tailwindcss==3.4.17
+framer-motion==12.34.3
+react-router-dom==6.30.1
+lucide-react==0.462.0
+sonner==1.7.4
+zod==3.25.76
+recharts==2.15.4
+
+# Backend & Database
+supabase-js==2.98.0
+
+# UI Components
+shadcn-ui
+radix-ui
+
+# Video
+webrtc-adapter
+metered-turn-server
+
+# Dev Tools
+eslint==9.32.0
+vitest==3.2.4
