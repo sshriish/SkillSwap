@@ -48,4 +48,4 @@ src/
 
 ## 👨‍💻 Developer
 
-Built by **Sshriish** — 2026
+Built by **sshriish** — 2026
