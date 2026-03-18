@@ -13,6 +13,7 @@ import Matching from "./pages/Matching";
 import Sessions from "./pages/Sessions";
 import VideoCall from "./pages/VideoCall";
 import Credits from "./pages/Credits";
+import Leaderboard from "./pages/Leaderboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
             <Route path="/call/:sessionId" element={<ProtectedRoute><VideoCall /></ProtectedRoute>} />
             <Route path="/credits" element={<ProtectedRoute><Credits /></ProtectedRoute>} />
+            <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
