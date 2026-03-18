@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
-  Settings, LogOut, Repeat, Menu, Moon, Sun, Bell,
+  Settings, LogOut, Repeat, Menu, Moon, Sun, Bell, Trophy,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/matching", label: "Find Peers", icon: Users },
   { to: "/sessions", label: "Sessions", icon: Calendar },
+  { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { to: "/credits", label: "Credits", icon: CreditCard },
   { to: "/profile", label: "Profile", icon: Settings },
 ];
@@ -51,7 +52,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setPendingCount(data.length);
         const ids = data.map((s) => s.learner_id);
         if (ids.length > 0) {
-          const { data: profs } = await supabase.from("profiles").select("user_id, display_name").in("user_id", ids);
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("user_id, display_name")
+            .in("user_id", ids);
           if (profs) {
             const map: Record<string, string> = {};
             profs.forEach((p) => (map[p.user_id] = p.display_name));
@@ -110,7 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className={`h-4 w-4 ${item.to === "/leaderboard" && active ? "text-yellow-500" : ""}`} />
                   {item.label}
                   {item.to === "/sessions" && pendingCount > 0 && (
                     <span className="ml-auto bg-destructive text-destructive-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
@@ -123,7 +127,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="p-4 border-t border-border space-y-1">
-            <button onClick={toggleDark} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full">
+            <button
+              onClick={toggleDark}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors w-full"
+            >
               {isDark ? <><Sun className="h-4 w-4" /> Light Mode</> : <><Moon className="h-4 w-4" /> Dark Mode</>}
             </button>
             <Button variant="ghost" className="w-full justify-start text-muted-foreground" onClick={signOut}>
@@ -144,7 +151,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
           <div className="flex items-center gap-4 ml-auto">
             <div className="relative">
-              <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 rounded-lg hover:bg-muted transition-colors">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 rounded-lg hover:bg-muted transition-colors"
+              >
                 <Bell className="h-5 w-5 text-muted-foreground" />
                 {pendingCount > 0 && (
                   <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold animate-pulse">
@@ -159,18 +169,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </div>
                   <div className="max-h-80 overflow-y-auto">
                     {pendingSessions.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">No new notifications 🎉</div>
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        No new notifications 🎉
+                      </div>
                     ) : (
                       pendingSessions.map((s) => (
-                        <div key={s.id} className="p-4 border-b border-border last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
-                          onClick={() => { setShowNotifications(false); navigate("/sessions"); }}>
+                        <div
+                          key={s.id}
+                          className="p-4 border-b border-border last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => { setShowNotifications(false); navigate("/sessions"); }}
+                        >
                           <div className="flex items-start gap-3">
                             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                               <Bell className="h-4 w-4 text-primary" />
                             </div>
                             <div>
                               <p className="text-sm font-medium">New session request!</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">{profiles[s.learner_id] || "Someone"} wants to learn from you</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {profiles[s.learner_id] || "Someone"} wants to learn from you
+                              </p>
                               <p className="text-xs text-primary mt-1">Click to view →</p>
                             </div>
                           </div>
