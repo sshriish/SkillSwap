@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { Repeat, ArrowRight, Video, CreditCard, Users, Star, Monitor, Zap, CheckCircle } from "lucide-react";
+import { Repeat, ArrowRight, Video, CreditCard, Users, Star, Monitor, Zap, CheckCircle, UserPlus, Search, Laptop } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -15,15 +15,30 @@ const features = [
 ];
 
 const howItWorks = [
-  { step: "01", title: "Create your profile", desc: "List the skills you can teach and the skills you want to learn." },
-  { step: "02", title: "Find your match", desc: "Browse peers, watch their intro videos and request a session." },
-  { step: "03", title: "Start swapping", desc: "Join a live video call, teach each other and earn credits." },
-];
-
-const testimonials = [
-  { name: "Arjun K.", skill: "Taught Python, Learned Guitar", text: "SkillSwap changed how I learn. I taught React to 3 people and used those credits to finally learn Spanish!", avatar: "A" },
-  { name: "Priya M.", skill: "Taught Design, Learned Coding", text: "The video call quality is amazing. I love that I can share my screen when teaching Figma.", avatar: "P" },
-  { name: "Rohan S.", skill: "Taught Music, Learned Marketing", text: "Found the perfect match in minutes. My piano skills helped someone who taught me SEO!", avatar: "R" },
+  {
+    icon: UserPlus,
+    step: "01",
+    title: "Create your profile",
+    desc: "Sign up for free, add the skills you can teach and the skills you want to learn.",
+    detail: "Takes less than 2 minutes",
+    color: "bg-blue-500/10 text-blue-500",
+  },
+  {
+    icon: Search,
+    step: "02",
+    title: "Find your match",
+    desc: "Browse peers, watch their intro videos and send a session request to whoever you like.",
+    detail: "Filter by skill, rating or category",
+    color: "bg-purple-500/10 text-purple-500",
+  },
+  {
+    icon: Laptop,
+    step: "03",
+    title: "Swap skills live",
+    desc: "Join a live HD video call, teach your skill, learn theirs and earn credits automatically.",
+    detail: "Credits transfer after 10 seconds",
+    color: "bg-green-500/10 text-green-500",
+  },
 ];
 
 export default function Landing() {
@@ -48,7 +63,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-background overflow-hidden">
 
-      {/* ── Nav ── */}
+      {/* Nav */}
       <nav className="flex items-center justify-between px-6 lg:px-16 py-4 border-b border-border sticky top-0 bg-background/80 backdrop-blur-lg z-50">
         <div className="flex items-center gap-2">
           <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
@@ -56,62 +71,51 @@ export default function Landing() {
           </div>
           <span className="text-xl font-display font-bold">SkillSwap</span>
         </div>
-        <div className="flex items-center gap-3">
-          <Link to="/auth">
-            <Button variant="ghost" className="hidden md:flex">Sign In</Button>
-          </Link>
-          <Link to="/auth">
-            <Button className="bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow">
-              Get Started Free <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
+        <Link to="/auth">
+          <Button className="bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow">
+            Join Now <ArrowRight className="ml-1 h-4 w-4" />
+          </Button>
+        </Link>
       </nav>
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <section className="relative px-6 lg:px-16 py-24 lg:py-36 text-center max-w-5xl mx-auto">
-        {/* Background blobs */}
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl -z-10" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl -z-10" />
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6 border border-primary/20">
-            <Zap className="h-3.5 w-3.5" /> The free peer-to-peer skill exchange platform
+            <Zap className="h-3.5 w-3.5" /> Free peer-to-peer skill exchange
           </div>
           <h1 className="text-5xl lg:text-7xl font-display font-bold leading-tight">
             Learn anything.<br />
             <span className="text-gradient-primary">Teach everything.</span>
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            SkillSwap connects you with peers for live video sessions. Trade your expertise for new knowledge — completely free, powered by credits.
+            SkillSwap connects you with people who want to learn what you know — and teach what you don't. No money, just skills.
           </p>
 
-          {/* Benefits */}
-          <div className="mt-6 flex flex-wrap gap-3 justify-center">
-            {["100% Free to use", "Live video calls", "Earn while you teach", "No subscriptions"].map((b) => (
+          <div className="mt-6 flex flex-wrap gap-4 justify-center">
+            {["100% Free", "Live video calls", "Earn while you teach", "No subscriptions"].map((b) => (
               <div key={b} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <CheckCircle className="h-4 w-4 text-primary" />
+                <CheckCircle className="h-4 w-4 text-primary shrink-0" />
                 {b}
               </div>
             ))}
           </div>
 
-          <div className="mt-10 flex gap-4 justify-center flex-wrap">
+          <div className="mt-10">
             <Link to="/auth">
-              <Button size="lg" className="bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow text-base px-8">
-                Start Swapping Free <ArrowRight className="ml-2 h-4 w-4" />
+              <Button size="lg" className="bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow text-base px-10">
+                Join SkillSwap — It's Free <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Link to="/auth">
-              <Button size="lg" variant="outline" className="text-base px-8">
-                Watch How It Works
-              </Button>
-            </Link>
+            <p className="text-xs text-muted-foreground mt-3">No credit card · No subscription · Free forever</p>
           </div>
         </motion.div>
       </section>
 
-      {/* ── Live Stats ── */}
+      {/* Live Stats */}
       <section className="px-6 lg:px-16 py-12 bg-muted/30">
         <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
@@ -135,16 +139,15 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── How It Works ── */}
+      {/* How It Works */}
       <section className="px-6 lg:px-16 py-24">
         <div className="max-w-5xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
             <h2 className="text-4xl font-display font-bold">How it works</h2>
-            <p className="text-muted-foreground mt-3">Get started in 3 simple steps</p>
+            <p className="text-muted-foreground mt-3">Simple, fast and completely free</p>
           </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-            {/* Connecting line */}
-            <div className="hidden md:block absolute top-10 left-1/3 right-1/3 h-0.5 bg-gradient-to-r from-primary/20 via-primary to-primary/20" />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {howItWorks.map((step, i) => (
               <motion.div
                 key={step.step}
@@ -152,20 +155,54 @@ export default function Landing() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.15 }}
-                className="flex flex-col items-center text-center"
+                className="relative"
               >
-                <div className="h-20 w-20 rounded-2xl bg-gradient-primary flex items-center justify-center text-2xl font-display font-bold text-primary-foreground shadow-glow mb-5">
-                  {step.step}
+                {/* Arrow between steps */}
+                {i < howItWorks.length - 1 && (
+                  <div className="hidden md:flex absolute -right-3 top-10 z-10 items-center justify-center">
+                    <ArrowRight className="h-6 w-6 text-primary/40" />
+                  </div>
+                )}
+
+                <div className="p-6 bg-card rounded-2xl border border-border hover:shadow-lg transition-all hover:-translate-y-1 h-full">
+                  {/* Step number + icon */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`h-12 w-12 rounded-xl ${step.color} flex items-center justify-center shrink-0`}>
+                      <step.icon className="h-6 w-6" />
+                    </div>
+                    <span className="text-4xl font-display font-bold text-muted-foreground/20">{step.step}</span>
+                  </div>
+
+                  <h3 className="font-display font-bold text-lg mb-2">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-3">{step.desc}</p>
+
+                  {/* Detail badge */}
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/5 border border-primary/10">
+                    <CheckCircle className="h-3 w-3 text-primary" />
+                    <span className="text-xs text-primary font-medium">{step.detail}</span>
+                  </div>
                 </div>
-                <h3 className="font-display font-bold text-lg mb-2">{step.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
               </motion.div>
             ))}
           </div>
+
+          {/* Bottom CTA under how it works */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mt-12"
+          >
+            <Link to="/auth">
+              <Button className="bg-gradient-primary text-primary-foreground hover:opacity-90">
+                Start for free — no setup needed <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </motion.div>
         </div>
       </section>
 
-      {/* ── Features ── */}
+      {/* Features */}
       <section className="px-6 lg:px-16 py-24 bg-muted/30">
         <div className="max-w-6xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
@@ -193,63 +230,25 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Testimonials ── */}
-      <section className="px-6 lg:px-16 py-24">
-        <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
-            <h2 className="text-4xl font-display font-bold">Loved by learners</h2>
-            <p className="text-muted-foreground mt-3">See what people are saying about SkillSwap</p>
-          </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
-              <motion.div
-                key={t.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="p-6 bg-card rounded-2xl border border-border"
-              >
-                <div className="flex gap-1 mb-4">
-                  {[1, 2, 3, 4, 5].map((s) => <Star key={s} className="h-4 w-4 fill-yellow-400 text-yellow-400" />)}
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-5">"{t.text}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-gradient-primary flex items-center justify-center text-primary-foreground font-bold">
-                    {t.avatar}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.skill}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
+      {/* CTA */}
       <section className="px-6 lg:px-16 py-24 bg-gradient-to-br from-primary/10 via-background to-accent/10">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl lg:text-5xl font-display font-bold mb-4">
-            Ready to start learning?
+            Your next skill is one swap away
           </h2>
           <p className="text-muted-foreground text-lg mb-8">
-            Join SkillSwap today — completely free. Start teaching what you know and learning what you don't.
+            Join SkillSwap today. Teach what you know, learn what you don't — completely free.
           </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <Link to="/auth">
-              <Button size="lg" className="bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow text-base px-10">
-                Create Free Account <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
+          <Link to="/auth">
+            <Button size="lg" className="bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow text-base px-10">
+              Join SkillSwap — It's Free <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </Link>
           <p className="text-xs text-muted-foreground mt-4">No credit card required · Free forever</p>
         </motion.div>
       </section>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <footer className="border-t border-border px-6 lg:px-16 py-10">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
