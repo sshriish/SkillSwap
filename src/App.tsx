@@ -42,6 +42,7 @@ function AnimatedRoutes() {
           <Route path="/call/:sessionId" element={<ProtectedRoute><VideoCall /></ProtectedRoute>} />
           <Route path="/credits" element={<ProtectedRoute><Credits /></ProtectedRoute>} />
           <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
+          <Route path="/badges" element={<ProtectedRoute><Badges /></ProtectedRoute>}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </motion.div>
