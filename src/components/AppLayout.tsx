@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
-  Settings, LogOut, Repeat, Menu, Moon, Sun, Bell, Trophy,
+  Settings, LogOut, Repeat, Menu, Moon, Sun, Bell, Trophy, Award,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/matching", label: "Find Peers", icon: Users },
   { to: "/sessions", label: "Sessions", icon: Calendar },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { to: "/badges",      label: "Badges",      icon: Award },
   { to: "/credits", label: "Credits", icon: CreditCard },
   { to: "/profile", label: "Profile", icon: Settings },
 ];
