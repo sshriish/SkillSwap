@@ -9,11 +9,158 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
-import { Plus, X, Save, Camera, Video, Upload } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, X, Save, Camera, Video, Upload, Copy, Check, Gift, Users, Share2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CATEGORIES = ["Programming", "Design", "Marketing", "Music", "Languages", "Business", "Science", "General"];
+
+// ── Referral Card ─────────────────────────────────────────────────────────────
+
+function ReferralCard({ userId }: { userId: string }) {
+  const [copied, setCopied] = useState(false);
+  const [referralStats, setReferralStats] = useState({ invited: 0, completed: 0, creditsEarned: 0 });
+
+  // Derive a short referral code from the user's UUID
+  const referralCode = userId.replace(/-/g, "").slice(0, 8).toUpperCase();
+  const referralLink = `${window.location.origin}?ref=${referralCode}`;
+
+  useEffect(() => {
+    // Count how many users signed up with this referral code
+    // and how many completed their first session (earned credits via referral bonus)
+    const load = async () => {
+      const { data: bonusTxs } = await supabase
+        .from("credit_transactions")
+        .select("id, amount")
+        .eq("user_id", userId)
+        .eq("type", "bonus")
+        .ilike("description", "%referral%");
+
+      if (bonusTxs) {
+        setReferralStats({
+          invited: bonusTxs.length,
+          completed: bonusTxs.length,
+          creditsEarned: bonusTxs.reduce((s, t) => s + t.amount, 0),
+        });
+      }
+    };
+    load();
+  }, [userId]);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    toast.success("Referral link copied!");
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const share = async () => {
+    if (navigator.share) {
+      await navigator.share({
+        title: "Join me on SkillSwap",
+        text: "Swap skills with real people. Teach what you know, learn what you don't — free.",
+        url: referralLink,
+      });
+    } else {
+      copy();
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+      <Card className="overflow-hidden border-2 border-dashed border-primary/20">
+        {/* Subtle top accent */}
+        <div className="h-1 bg-gradient-primary w-full" />
+
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-primary/10">
+              <Gift className="h-4 w-4 text-primary" />
+            </div>
+            <CardTitle className="text-base">Invite Friends, Earn Credits</CardTitle>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Share your link. When a friend joins and completes their first session,
+            you both get <span className="font-semibold text-foreground">+5 credits</span> free.
+          </p>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+
+          {/* Stats row */}
+          {referralStats.creditsEarned > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="grid grid-cols-3 gap-3"
+            >
+              {[
+                { label: "Friends invited", value: referralStats.invited },
+                { label: "Sessions completed", value: referralStats.completed },
+                { label: "Credits earned", value: `+${referralStats.creditsEarned}` },
+              ].map((s) => (
+                <div key={s.label} className="rounded-xl bg-muted/60 p-3 text-center">
+                  <p className="text-xl font-bold font-mono">{s.value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </motion.div>
+          )}
+
+          {/* Referral link box */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center bg-muted rounded-lg px-3 py-2 gap-2 min-w-0">
+              <span className="text-xs text-muted-foreground flex-shrink-0">🔗</span>
+              <span className="text-sm font-mono text-foreground truncate">{referralLink}</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={copy}
+              className="flex-shrink-0 gap-1.5 transition-all"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {copied ? (
+                  <motion.span key="check" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }} className="flex items-center gap-1.5 text-green-600">
+                    <Check className="h-3.5 w-3.5" /> Copied!
+                  </motion.span>
+                ) : (
+                  <motion.span key="copy" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }} className="flex items-center gap-1.5">
+                    <Copy className="h-3.5 w-3.5" /> Copy
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </Button>
+            <Button size="sm" variant="outline" onClick={share} className="flex-shrink-0 gap-1.5">
+              <Share2 className="h-3.5 w-3.5" /> Share
+            </Button>
+          </div>
+
+          {/* How it works */}
+          <div className="flex items-start gap-6 pt-1">
+            {[
+              { step: "1", text: "Copy your link" },
+              { step: "2", text: "Friend signs up" },
+              { step: "3", text: "They complete a session → you both get +5" },
+            ].map((s) => (
+              <div key={s.step} className="flex items-start gap-2 flex-1">
+                <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center mt-0.5">
+                  {s.step}
+                </span>
+                <p className="text-xs text-muted-foreground leading-snug">{s.text}</p>
+              </div>
+            ))}
+          </div>
+
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ── Main Profile Page ─────────────────────────────────────────────────────────
 
 export default function Profile() {
   const { user } = useAuth();
@@ -49,18 +196,11 @@ export default function Profile() {
     try {
       const fileExt = file.name.split(".").pop();
       const fileName = `public/${user.id}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(fileName, file, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
-      const avatarUrl = data.publicUrl;
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ avatar_url: avatarUrl })
-        .eq("user_id", user.id);
-      if (updateError) throw updateError;
-      setProfile((prev) => ({ ...prev, avatar_url: avatarUrl }));
+      await supabase.from("profiles").update({ avatar_url: data.publicUrl }).eq("user_id", user.id);
+      setProfile((prev) => ({ ...prev, avatar_url: data.publicUrl }));
       toast.success("Profile picture updated!");
     } catch (err: any) {
       toast.error(err.message || "Failed to upload image");
@@ -78,18 +218,11 @@ export default function Profile() {
     try {
       const fileExt = file.name.split(".").pop();
       const fileName = `public/${user.id}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from("trial-videos")
-        .upload(fileName, file, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from("trial-videos").upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("trial-videos").getPublicUrl(fileName);
-      const videoUrl = data.publicUrl;
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ trial_video_url: videoUrl })
-        .eq("user_id", user.id);
-      if (updateError) throw updateError;
-      setProfile((prev) => ({ ...prev, trial_video_url: videoUrl }));
+      await supabase.from("profiles").update({ trial_video_url: data.publicUrl }).eq("user_id", user.id);
+      setProfile((prev) => ({ ...prev, trial_video_url: data.publicUrl }));
       toast.success("Trial video uploaded!");
     } catch (err: any) {
       toast.error(err.message || "Failed to upload video");
@@ -138,11 +271,12 @@ export default function Profile() {
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-3xl mx-auto space-y-6 pb-12">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-3xl font-display font-bold">Your Profile</h1>
         </motion.div>
 
+        {/* Profile Media */}
         <Card>
           <CardHeader><CardTitle>Profile Media</CardTitle></CardHeader>
           <CardContent className="space-y-6">
@@ -196,6 +330,7 @@ export default function Profile() {
           </CardContent>
         </Card>
 
+        {/* Basic Info */}
         <Card>
           <CardHeader><CardTitle>Basic Info</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -213,6 +348,7 @@ export default function Profile() {
           </CardContent>
         </Card>
 
+        {/* Skills */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Your Skills</CardTitle>
@@ -264,7 +400,11 @@ export default function Profile() {
             ))}
           </CardContent>
         </Card>
+
+        {/* ── Referral Card at bottom ── */}
+        {user && <ReferralCard userId={user.id} />}
+
       </div>
     </AppLayout>
   );
-}
+      }
