@@ -36,7 +36,15 @@ function SignalBars({ bars, color }: { bars: number; color: string }) {
   );
 }
 
-function QualityBadge({ quality, rttMs, packetLoss }: { quality: ConnectionQuality; rttMs: number | null; packetLoss: number | null }) {
+function QualityBadge({
+  quality,
+  rttMs,
+  packetLoss,
+}: {
+  quality: ConnectionQuality;
+  rttMs: number | null;
+  packetLoss: number | null;
+}) {
   const [showDetail, setShowDetail] = useState(false);
   const cfg = QUALITY_CONFIG[quality];
 
@@ -64,15 +72,21 @@ function QualityBadge({ quality, rttMs, packetLoss }: { quality: ConnectionQuali
             <p className="text-xs font-semibold text-white/80 mb-2">Connection stats</p>
             <div className="flex justify-between text-xs">
               <span className="text-white/50">Latency</span>
-              <span className="text-white font-mono">{rttMs !== null ? `${rttMs} ms` : "–"}</span>
+              <span className="text-white font-mono">
+                {rttMs !== null ? `${rttMs} ms` : "–"}
+              </span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-white/50">Packet loss</span>
-              <span className="text-white font-mono">{packetLoss !== null ? `${packetLoss}%` : "–"}</span>
+              <span className="text-white font-mono">
+                {packetLoss !== null ? `${packetLoss}%` : "–"}
+              </span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-white/50">Quality</span>
-              <span className="font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
+              <span className="font-medium" style={{ color: cfg.color }}>
+                {cfg.label}
+              </span>
             </div>
           </motion.div>
         )}
@@ -112,8 +126,14 @@ export default function VideoCall() {
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const isScreenSharingRef = useRef(false);
 
-  const { remoteVideoRef, connectionState, isConnected, qualityStats, replaceTrack, cleanup: cleanupWebRTC } =
-    useWebRTC({ roomId, userId: user?.id, localStream });
+  const {
+    remoteVideoRef,
+    connectionState,
+    isConnected,
+    qualityStats,
+    replaceTrack,
+    cleanup: cleanupWebRTC,
+  } = useWebRTC({ roomId, userId: user?.id, localStream });
 
   useEffect(() => {
     const startMedia = async () => {
@@ -152,13 +172,21 @@ export default function VideoCall() {
 
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharingRef.current) {
+      // Switch back to camera
       try {
-        localStream?.getTracks().forEach((t) => t.stop());
         const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(camStream);
-        if (localVideoRef.current) localVideoRef.current.srcObject = camStream;
+
+        // Replace tracks on the peer connection WITHOUT changing localStream reference first
         camStream.getVideoTracks().forEach((t) => replaceTrack(t));
         camStream.getAudioTracks().forEach((t) => replaceTrack(t));
+
+        // Update local preview
+        if (localVideoRef.current) localVideoRef.current.srcObject = camStream;
+
+        // Stop old screen tracks
+        localStream?.getTracks().forEach((t) => t.stop());
+
+        setLocalStream(camStream);
         isScreenSharingRef.current = false;
         setIsScreenSharing(false);
         toast.success("Switched back to camera");
@@ -166,19 +194,43 @@ export default function VideoCall() {
         toast.error("Could not switch back to camera.");
       }
     } else {
+      // Start screen share
       try {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: { frameRate: 30 },
-          audio: true,
+          audio: false, // avoid audio track mismatch issues
         });
+
+        const screenVideoTrack = screenStream.getVideoTracks()[0];
+
+        // Replace ONLY the video track on the peer connection — keep existing audio alive
+        replaceTrack(screenVideoTrack);
+
+        // Update local preview
+        if (localVideoRef.current) {
+          const previewStream = new MediaStream([
+            screenVideoTrack,
+            ...(localStream?.getAudioTracks() ?? []),
+          ]);
+          localVideoRef.current.srcObject = previewStream;
+        }
+
+        // Stop only the old video track
         localStream?.getVideoTracks().forEach((t) => t.stop());
-        if (localVideoRef.current) localVideoRef.current.srcObject = screenStream;
-        screenStream.getVideoTracks().forEach((t) => replaceTrack(t));
-        setLocalStream(screenStream);
+
+        // Build new localStream with screen video + existing audio
+        const newStream = new MediaStream([
+          screenVideoTrack,
+          ...(localStream?.getAudioTracks() ?? []),
+        ]);
+        setLocalStream(newStream);
+
         isScreenSharingRef.current = true;
         setIsScreenSharing(true);
         toast.success("Screen sharing started");
-        screenStream.getVideoTracks()[0].onended = () => {
+
+        // Auto-stop when user clicks browser's native "Stop sharing"
+        screenVideoTrack.onended = () => {
           if (isScreenSharingRef.current) toggleScreenShare();
         };
       } catch (err: any) {
@@ -231,10 +283,16 @@ export default function VideoCall() {
   return (
     <div className="fixed inset-0 bg-foreground flex flex-col">
 
+      {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 bg-foreground/90">
         <div className="flex items-center gap-3">
-          <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-white/30"}`} />
+          <div
+            className={`h-2 w-2 rounded-full ${
+              isConnected ? "bg-green-500 animate-pulse" : "bg-white/30"
+            }`}
+          />
           <span className="text-sm text-white/70">{connectionLabel()}</span>
+
           <AnimatePresence>
             {isConnected && (
               <motion.div
@@ -262,7 +320,10 @@ export default function VideoCall() {
         </div>
       </div>
 
+      {/* Video area */}
       <div className="flex-1 relative flex items-center justify-center p-4">
+
+        {/* Remote video */}
         <div className="w-full max-w-4xl aspect-video bg-card/10 rounded-2xl overflow-hidden border border-white/10">
           <video
             ref={remoteVideoRef}
@@ -281,13 +342,16 @@ export default function VideoCall() {
           )}
         </div>
 
+        {/* Local PiP */}
         <div className="absolute bottom-8 right-8 w-48 aspect-video rounded-xl overflow-hidden border-2 border-primary/50 shadow-lg group">
           <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+
           {isCameraOff && !isScreenSharing && (
             <div className="absolute inset-0 bg-card flex items-center justify-center">
               <CameraOff className="h-6 w-6 text-muted-foreground" />
             </div>
           )}
+
           <AnimatePresence>
             {isScreenSharing && (
               <motion.div
@@ -304,6 +368,7 @@ export default function VideoCall() {
           </AnimatePresence>
         </div>
 
+        {/* Chat panel */}
         <AnimatePresence>
           {chatOpen && sessionId && user && (
             <ChatPanel sessionId={sessionId} userId={user.id} onClose={() => setChatOpen(false)} />
@@ -311,6 +376,7 @@ export default function VideoCall() {
         </AnimatePresence>
       </div>
 
+      {/* Controls */}
       <VideoControls
         isMuted={isMuted}
         isCameraOff={isCameraOff}
