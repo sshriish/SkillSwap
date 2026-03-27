@@ -10,10 +10,7 @@ import VideoControls from "@/components/video/VideoControls";
 import ChatPanel from "@/components/video/ChatPanel";
 import type { ConnectionQuality } from "@/hooks/useWebRTC";
 
-const QUALITY_CONFIG: Record
-  ConnectionQuality,
-  { label: string; color: string; dot: string; bars: number }
-> = {
+const QUALITY_CONFIG: Record<ConnectionQuality, { label: string; color: string; dot: string; bars: number }> = {
   good:    { label: "Good",    color: "#22c55e", dot: "#22c55e", bars: 3 },
   fair:    { label: "Fair",    color: "#f59e0b", dot: "#f59e0b", bars: 2 },
   poor:    { label: "Poor",    color: "#ef4444", dot: "#ef4444", bars: 1 },
@@ -39,15 +36,7 @@ function SignalBars({ bars, color }: { bars: number; color: string }) {
   );
 }
 
-function QualityBadge({
-  quality,
-  rttMs,
-  packetLoss,
-}: {
-  quality: ConnectionQuality;
-  rttMs: number | null;
-  packetLoss: number | null;
-}) {
+function QualityBadge({ quality, rttMs, packetLoss }: { quality: ConnectionQuality; rttMs: number | null; packetLoss: number | null }) {
   const [showDetail, setShowDetail] = useState(false);
   const cfg = QUALITY_CONFIG[quality];
 
@@ -75,21 +64,15 @@ function QualityBadge({
             <p className="text-xs font-semibold text-white/80 mb-2">Connection stats</p>
             <div className="flex justify-between text-xs">
               <span className="text-white/50">Latency</span>
-              <span className="text-white font-mono">
-                {rttMs !== null ? `${rttMs} ms` : "–"}
-              </span>
+              <span className="text-white font-mono">{rttMs !== null ? `${rttMs} ms` : "–"}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-white/50">Packet loss</span>
-              <span className="text-white font-mono">
-                {packetLoss !== null ? `${packetLoss}%` : "–"}
-              </span>
+              <span className="text-white font-mono">{packetLoss !== null ? `${packetLoss}%` : "–"}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-white/50">Quality</span>
-              <span className="font-medium" style={{ color: cfg.color }}>
-                {cfg.label}
-              </span>
+              <span className="font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
             </div>
           </motion.div>
         )}
@@ -148,7 +131,9 @@ export default function VideoCall() {
   }, []);
 
   useEffect(() => {
-    return () => { localStream?.getTracks().forEach((t) => t.stop()); };
+    return () => {
+      localStream?.getTracks().forEach((t) => t.stop());
+    };
   }, [localStream]);
 
   const toggleMute = () => {
@@ -187,14 +172,12 @@ export default function VideoCall() {
           audio: true,
         });
         localStream?.getVideoTracks().forEach((t) => t.stop());
-
         if (localVideoRef.current) localVideoRef.current.srcObject = screenStream;
         screenStream.getVideoTracks().forEach((t) => replaceTrack(t));
         setLocalStream(screenStream);
         isScreenSharingRef.current = true;
         setIsScreenSharing(true);
         toast.success("Screen sharing started");
-
         screenStream.getVideoTracks()[0].onended = () => {
           if (isScreenSharingRef.current) toggleScreenShare();
         };
@@ -250,13 +233,8 @@ export default function VideoCall() {
 
       <div className="flex items-center justify-between px-5 py-3 bg-foreground/90">
         <div className="flex items-center gap-3">
-          <div
-            className={`h-2 w-2 rounded-full ${
-              isConnected ? "bg-green-500 animate-pulse" : "bg-white/30"
-            }`}
-          />
+          <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-white/30"}`} />
           <span className="text-sm text-white/70">{connectionLabel()}</span>
-
           <AnimatePresence>
             {isConnected && (
               <motion.div
@@ -285,7 +263,6 @@ export default function VideoCall() {
       </div>
 
       <div className="flex-1 relative flex items-center justify-center p-4">
-
         <div className="w-full max-w-4xl aspect-video bg-card/10 rounded-2xl overflow-hidden border border-white/10">
           <video
             ref={remoteVideoRef}
@@ -306,13 +283,11 @@ export default function VideoCall() {
 
         <div className="absolute bottom-8 right-8 w-48 aspect-video rounded-xl overflow-hidden border-2 border-primary/50 shadow-lg group">
           <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-
           {isCameraOff && !isScreenSharing && (
             <div className="absolute inset-0 bg-card flex items-center justify-center">
               <CameraOff className="h-6 w-6 text-muted-foreground" />
             </div>
           )}
-
           <AnimatePresence>
             {isScreenSharing && (
               <motion.div
