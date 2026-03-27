@@ -1,319 +1,391 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useWebRTC } from "@/hooks/useWebRTC";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Camera, CameraOff, Clock, Monitor } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import VideoControls from "@/components/video/VideoControls";
+import ChatPanel from "@/components/video/ChatPanel";
+import type { ConnectionQuality } from "@/hooks/useWebRTC";
 
-const buildIceServers = (): RTCIceServer[] => {
-  const servers: RTCIceServer[] = [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ];
-  const turnUrl = import.meta.env.VITE_TURN_URL;
-  const turnUsername = import.meta.env.VITE_TURN_USERNAME;
-  const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
-  if (turnUrl && turnUsername && turnCredential) {
-    servers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential });
-    servers.push({
-      urls: turnUrl.replace("turn:", "turns:").replace(":80", ":443"),
-      username: turnUsername,
-      credential: turnCredential,
-    });
-  }
-  return servers;
+const QUALITY_CONFIG: Record<ConnectionQuality, { label: string; color: string; dot: string; bars: number }> = {
+  good:    { label: "Good",    color: "#22c55e", dot: "#22c55e", bars: 3 },
+  fair:    { label: "Fair",    color: "#f59e0b", dot: "#f59e0b", bars: 2 },
+  poor:    { label: "Poor",    color: "#ef4444", dot: "#ef4444", bars: 1 },
+  unknown: { label: "–",       color: "#6b7280", dot: "#6b7280", bars: 0 },
 };
 
-export type ConnectionQuality = "good" | "fair" | "poor" | "unknown";
+function SignalBars({ bars, color }: { bars: number; color: string }) {
+  return (
+    <div className="flex items-end gap-[2px] h-3.5">
+      {[1, 2, 3].map((b) => (
+        <div
+          key={b}
+          style={{
+            width: 3,
+            height: b === 1 ? 5 : b === 2 ? 9 : 14,
+            borderRadius: 1,
+            background: b <= bars ? color : "rgba(255,255,255,0.2)",
+            transition: "background 0.4s",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
-interface QualityStats {
+function QualityBadge({
+  quality,
+  rttMs,
+  packetLoss,
+}: {
   quality: ConnectionQuality;
   rttMs: number | null;
   packetLoss: number | null;
-}
+}) {
+  const [showDetail, setShowDetail] = useState(false);
+  const cfg = QUALITY_CONFIG[quality];
 
-interface UseWebRTCOptions {
-  roomId: string | null;
-  userId: string | undefined;
-  localStream: MediaStream | null;
-}
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowDetail((v) => !v)}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+      >
+        <SignalBars bars={cfg.bars} color={cfg.color} />
+        <span className="text-xs font-medium" style={{ color: cfg.color }}>
+          {cfg.label}
+        </span>
+      </button>
 
-export function useWebRTC({ roomId, userId, localStream }: UseWebRTCOptions) {
-  const peerConnection = useRef<RTCPeerConnection | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [connectionState, setConnectionState] = useState<string>("new");
-  const [isConnected, setIsConnected] = useState(false);
-
-  const [qualityStats, setQualityStats] = useState<QualityStats>({
-    quality: "unknown",
-    rttMs: null,
-    packetLoss: null,
-  });
-  const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const prevPackets = useRef<{ sent: number; lost: number } | null>(null);
-
-  // Flag to prevent the localStream effect from interfering during manual replaceTrack
-  const isManualReplacingTrack = useRef(false);
-
-  const makingOffer = useRef(false);
-  const ignoreOffer = useRef(false);
-  const polite = useRef(false);
-
-  const startStatsPolling = useCallback(() => {
-    if (statsIntervalRef.current) return;
-    statsIntervalRef.current = setInterval(async () => {
-      const pc = peerConnection.current;
-      if (!pc || pc.connectionState !== "connected") return;
-
-      try {
-        const stats = await pc.getStats();
-        let rttMs: number | null = null;
-        let packetsSent = 0;
-        let packetsLost = 0;
-
-        stats.forEach((report) => {
-          if (report.type === "outbound-rtp" && report.kind === "video") {
-            packetsSent = report.packetsSent ?? 0;
-          }
-          if (report.type === "remote-inbound-rtp" && report.kind === "video") {
-            if (typeof report.roundTripTime === "number") {
-              rttMs = Math.round(report.roundTripTime * 1000);
-            }
-            packetsLost = report.packetsLost ?? 0;
-          }
-          if (report.type === "candidate-pair" && report.state === "succeeded") {
-            if (rttMs === null && typeof report.currentRoundTripTime === "number") {
-              rttMs = Math.round(report.currentRoundTripTime * 1000);
-            }
-          }
-        });
-
-        let packetLoss: number | null = null;
-        if (prevPackets.current !== null) {
-          const deltaSent = packetsSent - prevPackets.current.sent;
-          const deltaLost = packetsLost - prevPackets.current.lost;
-          if (deltaSent > 0) {
-            packetLoss = Math.min(100, Math.round((deltaLost / (deltaSent + deltaLost)) * 100));
-          }
-        }
-        prevPackets.current = { sent: packetsSent, lost: packetsLost };
-
-        let quality: ConnectionQuality = "unknown";
-        if (rttMs !== null || packetLoss !== null) {
-          const rtt = rttMs ?? 0;
-          const loss = packetLoss ?? 0;
-          if (rtt < 150 && loss < 3) quality = "good";
-          else if (rtt < 300 && loss < 10) quality = "fair";
-          else quality = "poor";
-        }
-
-        setQualityStats({ quality, rttMs, packetLoss });
-      } catch {
-        // getStats can fail transiently — ignore
-      }
-    }, 3000);
-  }, []);
-
-  const stopStatsPolling = useCallback(() => {
-    if (statsIntervalRef.current) {
-      clearInterval(statsIntervalRef.current);
-      statsIntervalRef.current = null;
-    }
-    prevPackets.current = null;
-    setQualityStats({ quality: "unknown", rttMs: null, packetLoss: null });
-  }, []);
-
-  const handleSignal = useCallback(
-    async (signal: { type: string; payload: any }, pc: RTCPeerConnection | null) => {
-      if (!pc) return;
-      try {
-        if (signal.type === "offer") {
-          const offerCollision = makingOffer.current || pc.signalingState !== "stable";
-          ignoreOffer.current = !polite.current && offerCollision;
-          if (ignoreOffer.current) return;
-          await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-          await pc.setLocalDescription();
-          if (roomId && userId) {
-            await (supabase.from("signaling") as any).insert({
-              room_id: roomId,
-              sender_id: userId,
-              type: "answer",
-              payload: pc.localDescription!.toJSON(),
-            });
-          }
-        } else if (signal.type === "answer") {
-          if (pc.signalingState === "have-local-offer") {
-            await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-          }
-        } else if (signal.type === "ice-candidate") {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(signal.payload));
-          } catch (err) {
-            if (!ignoreOffer.current) console.error("[WebRTC] ICE candidate error:", err);
-          }
-        }
-      } catch (err) {
-        console.error("[WebRTC] Signal handling error:", err);
-      }
-    },
-    [roomId, userId]
+      <AnimatePresence>
+        {showDetail && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-9 left-0 z-50 rounded-xl border border-white/10 bg-black/80 backdrop-blur-sm p-3 min-w-[160px] space-y-1.5"
+          >
+            <p className="text-xs font-semibold text-white/80 mb-2">Connection stats</p>
+            <div className="flex justify-between text-xs">
+              <span className="text-white/50">Latency</span>
+              <span className="text-white font-mono">
+                {rttMs !== null ? `${rttMs} ms` : "–"}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-white/50">Packet loss</span>
+              <span className="text-white font-mono">
+                {packetLoss !== null ? `${packetLoss}%` : "–"}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-white/50">Quality</span>
+              <span className="font-medium" style={{ color: cfg.color }}>
+                {cfg.label}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
+}
 
-  const cleanup = useCallback(() => {
-    stopStatsPolling();
-    peerConnection.current?.close();
-    peerConnection.current = null;
-    setRemoteStream(null);
-    setIsConnected(false);
-    setConnectionState("closed");
-  }, [stopStatsPolling]);
+function ScreenSharePill() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/90 text-primary-foreground text-xs font-medium"
+    >
+      <Monitor className="h-3 w-3" />
+      Sharing screen
+    </motion.div>
+  );
+}
 
-  const createPeerConnection = useCallback(() => {
-    if (!roomId || !userId) return null;
+export default function VideoCall() {
+  const { sessionId } = useParams();
+  const [searchParams] = useSearchParams();
+  const roomId = searchParams.get("room");
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
-    const pc = new RTCPeerConnection({ iceServers: buildIceServers() });
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [chatOpen, setChatOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const isScreenSharingRef = useRef(false);
 
-    pc.onicecandidate = async (event) => {
-      if (event.candidate && roomId) {
-        await (supabase.from("signaling") as any).insert({
-          room_id: roomId,
-          sender_id: userId,
-          type: "ice-candidate",
-          payload: event.candidate.toJSON(),
-        });
-      }
-    };
-
-    pc.ontrack = (event) => {
-      const stream = event.streams[0];
-      if (stream) {
-        setRemoteStream(stream);
-        setIsConnected(true);
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      setConnectionState(pc.connectionState);
-      if (pc.connectionState === "connected") {
-        setIsConnected(true);
-        startStatsPolling();
-      }
-      if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
-        setIsConnected(false);
-        stopStatsPolling();
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "failed") pc.restartIce();
-    };
-
-    pc.onnegotiationneeded = async () => {
-      try {
-        makingOffer.current = true;
-        await pc.setLocalDescription();
-        await (supabase.from("signaling") as any).insert({
-          room_id: roomId,
-          sender_id: userId,
-          type: "offer",
-          payload: pc.localDescription!.toJSON(),
-        });
-      } catch (err) {
-        console.error("[WebRTC] Negotiation error:", err);
-      } finally {
-        makingOffer.current = false;
-      }
-    };
-
-    peerConnection.current = pc;
-    return pc;
-  }, [roomId, userId, startStatsPolling, stopStatsPolling]);
-
-  // Only sync tracks when localStream changes during initial setup,
-  // NOT during manual track replacements (screen share)
-  useEffect(() => {
-    if (!localStream || !peerConnection.current) return;
-    if (isManualReplacingTrack.current) return; // skip if replaceTrack() is handling it
-
-    const pc = peerConnection.current;
-    const senders = pc.getSenders();
-    localStream.getTracks().forEach((track) => {
-      const existingSender = senders.find((s) => s.track?.kind === track.kind);
-      if (existingSender) existingSender.replaceTrack(track);
-      else pc.addTrack(track, localStream);
-    });
-  }, [localStream]);
-
-  useEffect(() => {
-    if (!roomId || !userId || !localStream) return;
-
-    const pc = createPeerConnection();
-    if (!pc) return;
-
-    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-
-    const init = async () => {
-      const { data: existing } = await (supabase.from("signaling") as any)
-        .select("sender_id")
-        .eq("room_id", roomId)
-        .neq("sender_id", userId)
-        .limit(1);
-
-      polite.current = (existing?.length ?? 0) > 0;
-
-      const { data: signals } = await (supabase.from("signaling") as any)
-        .select("*")
-        .eq("room_id", roomId)
-        .neq("sender_id", userId)
-        .order("created_at", { ascending: true });
-
-      if (signals) {
-        for (const sig of signals) await handleSignal(sig, pc);
-      }
-    };
-
-    init();
-
-    const channel = supabase
-      .channel(`signaling-${roomId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "signaling", filter: `room_id=eq.${roomId}` },
-        async (payload) => {
-          const signal = payload.new as any;
-          if (signal.sender_id === userId) return;
-          await handleSignal(signal, peerConnection.current);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      cleanup();
-    };
-  }, [roomId, userId, localStream, createPeerConnection, handleSignal, cleanup]);
-
-  // replaceTrack sets the flag so the localStream effect doesn't interfere
-  const replaceTrack = useCallback((newTrack: MediaStreamTrack) => {
-    const pc = peerConnection.current;
-    if (!pc) return;
-    const sender = pc.getSenders().find((s) => s.track?.kind === newTrack.kind);
-    if (sender) {
-      isManualReplacingTrack.current = true;
-      sender.replaceTrack(newTrack).finally(() => {
-        // Reset flag after React has had a chance to process the localStream update
-        setTimeout(() => {
-          isManualReplacingTrack.current = false;
-        }, 500);
-      });
-    }
-  }, []);
-
-  return {
-    remoteStream,
+  const {
     remoteVideoRef,
     connectionState,
     isConnected,
     qualityStats,
     replaceTrack,
-    cleanup,
-  };
+    cleanup: cleanupWebRTC,
+  } = useWebRTC({ roomId, userId: user?.id, localStream });
+
+  useEffect(() => {
+    const startMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setLocalStream(stream);
+        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      } catch {
+        toast.error("Could not access camera/microphone. Please check your browser permissions.");
       }
+    };
+    startMedia();
+    timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      localStream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [localStream]);
+
+  const toggleMute = () => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach((t) => (t.enabled = !t.enabled));
+      setIsMuted((prev) => !prev);
+    }
+  };
+
+  const toggleCamera = () => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach((t) => (t.enabled = !t.enabled));
+      setIsCameraOff((prev) => !prev);
+    }
+  };
+
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharingRef.current) {
+      try {
+        const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+        // Replace tracks on peer connection first
+        camStream.getVideoTracks().forEach((t) => replaceTrack(t));
+        camStream.getAudioTracks().forEach((t) => replaceTrack(t));
+
+        // Update local preview
+        if (localVideoRef.current) localVideoRef.current.srcObject = camStream;
+
+        // Stop old screen tracks
+        localStream?.getTracks().forEach((t) => t.stop());
+
+        setLocalStream(camStream);
+        isScreenSharingRef.current = false;
+        setIsScreenSharing(false);
+        toast.success("Switched back to camera");
+      } catch {
+        toast.error("Could not switch back to camera.");
+      }
+    } else {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 30 },
+          audio: false,
+        });
+
+        const screenVideoTrack = screenStream.getVideoTracks()[0];
+
+        // Replace ONLY the video track — keep existing audio alive
+        replaceTrack(screenVideoTrack);
+
+        // Update local preview
+        if (localVideoRef.current) {
+          const previewStream = new MediaStream([
+            screenVideoTrack,
+            ...(localStream?.getAudioTracks() ?? []),
+          ]);
+          localVideoRef.current.srcObject = previewStream;
+        }
+
+        // Stop only the old video track
+        localStream?.getVideoTracks().forEach((t) => t.stop());
+
+        // Build new localStream with screen video + existing audio
+        const newStream = new MediaStream([
+          screenVideoTrack,
+          ...(localStream?.getAudioTracks() ?? []),
+        ]);
+        setLocalStream(newStream);
+
+        isScreenSharingRef.current = true;
+        setIsScreenSharing(true);
+        toast.success("Screen sharing started");
+
+        // Auto-stop when user clicks browser's native "Stop sharing"
+        screenVideoTrack.onended = () => {
+          if (isScreenSharingRef.current) toggleScreenShare();
+        };
+      } catch (err: any) {
+        if (err?.name !== "NotAllowedError") {
+          toast.error("Could not start screen sharing.");
+        }
+      }
+    }
+  }, [localStream, replaceTrack]);
+
+  const endCall = async () => {
+    localStream?.getTracks().forEach((t) => t.stop());
+    clearInterval(timerRef.current);
+    cleanupWebRTC();
+
+    if (sessionId) {
+      const minutes = Math.floor(elapsed / 60);
+      await supabase
+        .from("sessions")
+        .update({
+          status: "completed",
+          ended_at: new Date().toISOString(),
+          duration_minutes: minutes,
+          credits_transferred: elapsed >= 10 ? 1 : 0,
+        })
+        .eq("id", sessionId);
+
+      if (roomId) {
+        await (supabase.from("signaling") as any).delete().eq("room_id", roomId);
+      }
+    }
+
+    navigate("/sessions");
+    toast.success("Call ended");
+  };
+
+  const formatTime = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+  const connectionLabel = () => {
+    switch (connectionState) {
+      case "connected":    return "Connected";
+      case "connecting":   return "Connecting...";
+      case "disconnected": return "Reconnecting...";
+      case "failed":       return "Connection failed";
+      default:             return "Waiting for peer...";
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-foreground flex flex-col">
+
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-5 py-3 bg-foreground/90">
+        <div className="flex items-center gap-3">
+          <div
+            className={`h-2 w-2 rounded-full ${
+              isConnected ? "bg-green-500 animate-pulse" : "bg-white/30"
+            }`}
+          />
+          <span className="text-sm text-white/70">{connectionLabel()}</span>
+
+          <AnimatePresence>
+            {isConnected && (
+              <motion.div
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6 }}
+              >
+                <QualityBadge
+                  quality={qualityStats.quality}
+                  rttMs={qualityStats.rttMs}
+                  packetLoss={qualityStats.packetLoss}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <AnimatePresence>
+          {isScreenSharing && <ScreenSharePill />}
+        </AnimatePresence>
+
+        <div className="flex items-center gap-2 text-white/70">
+          <Clock className="h-3.5 w-3.5" />
+          <span className="text-sm font-mono">{formatTime(elapsed)}</span>
+        </div>
+      </div>
+
+      {/* Video area */}
+      <div className="flex-1 relative flex items-center justify-center p-4">
+
+        {/* Remote video */}
+        <div className="w-full max-w-4xl aspect-video bg-card/10 rounded-2xl overflow-hidden border border-white/10">
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className={`w-full h-full object-cover ${isConnected ? "block" : "hidden"}`}
+          />
+          {!isConnected && (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="text-center text-white/30">
+                <Camera className="mx-auto h-12 w-12 mb-2" />
+                <p className="text-sm">Waiting for peer to connect...</p>
+                <p className="text-xs mt-1 text-white/20">Share this session link with your partner</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Local PiP */}
+        <div className="absolute bottom-8 right-8 w-48 aspect-video rounded-xl overflow-hidden border-2 border-primary/50 shadow-lg group">
+          <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+
+          {isCameraOff && !isScreenSharing && (
+            <div className="absolute inset-0 bg-card flex items-center justify-center">
+              <CameraOff className="h-6 w-6 text-muted-foreground" />
+            </div>
+          )}
+
+          <AnimatePresence>
+            {isScreenSharing && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute bottom-1.5 left-0 right-0 flex justify-center"
+              >
+                <span className="text-[10px] bg-black/60 text-white/80 px-2 py-0.5 rounded-full">
+                  Your screen
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Chat panel */}
+        <AnimatePresence>
+          {chatOpen && sessionId && user && (
+            <ChatPanel sessionId={sessionId} userId={user.id} onClose={() => setChatOpen(false)} />
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Controls */}
+      <VideoControls
+        isMuted={isMuted}
+        isCameraOff={isCameraOff}
+        isScreenSharing={isScreenSharing}
+        chatOpen={chatOpen}
+        onToggleMute={toggleMute}
+        onToggleCamera={toggleCamera}
+        onToggleScreenShare={toggleScreenShare}
+        onToggleChat={() => setChatOpen((prev) => !prev)}
+        onEndCall={endCall}
+      />
+    </div>
+  );
+}
