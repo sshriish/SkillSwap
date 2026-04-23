@@ -115,7 +115,12 @@ export default function Matching() {
       m.display_name.toLowerCase().includes(search.toLowerCase()) ||
       m.offeredSkills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
     const matchesFav = showFavourites ? favourites.has(m.user_id) : true;
-    return matchesSearch && matchesFav;
+    const matchesCategory =
+      selectedCategory === "All" ||
+      m.offeredSkills.some((s) =>
+        s.toLowerCase().includes(selectedCategory.toLowerCase())
+      );
+    return matchesSearch && matchesFav && matchesCategory;
   });
 
   const renderStars = (rating: number, count: number) => {
