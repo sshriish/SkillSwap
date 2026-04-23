@@ -34,6 +34,72 @@ const REPORT_REASONS = [
   { value: "other",           label: "Other" },
 ];
 
+// Gold / Silver / Bronze styles for top 3
+const RANK_STYLES: Record<number, { card: string; avatarRing: string; badge: string; label: string; medal: string }> = {
+  1: {
+    card: "ring-2 ring-yellow-400/70 shadow-[0_0_24px_4px_rgba(250,204,21,0.2)]",
+    avatarRing: "ring-[4px] ring-yellow-400 ring-offset-2 ring-offset-background",
+    badge: "bg-yellow-400/15 text-yellow-500 border border-yellow-400/40",
+    label: "🥇 #1 on Leaderboard",
+    medal: "🥇",
+  },
+  2: {
+    card: "ring-2 ring-slate-400/60 shadow-[0_0_18px_3px_rgba(148,163,184,0.18)]",
+    avatarRing: "ring-[4px] ring-slate-400 ring-offset-2 ring-offset-background",
+    badge: "bg-slate-400/15 text-slate-400 border border-slate-400/40",
+    label: "🥈 #2 on Leaderboard",
+    medal: "🥈",
+  },
+  3: {
+    card: "ring-2 ring-amber-600/60 shadow-[0_0_18px_3px_rgba(180,83,9,0.18)]",
+    avatarRing: "ring-[4px] ring-amber-600 ring-offset-2 ring-offset-background",
+    badge: "bg-amber-600/15 text-amber-600 border border-amber-600/40",
+    label: "🥉 #3 on Leaderboard",
+    medal: "🥉",
+  },
+};
+
+function CarbonShimmer({ rank }: { rank: number }) {
+  const shimmerColor: Record<number, string> = {
+    1: "from-yellow-400/0 via-yellow-300/10 to-yellow-400/0",
+    2: "from-slate-400/0 via-slate-300/8 to-slate-400/0",
+    3: "from-amber-600/0 via-amber-400/8 to-amber-600/0",
+  };
+  const stripeColor: Record<number, string> = {
+    1: "#facc15",
+    2: "#94a3b8",
+    3: "#b45309",
+  };
+  return (
+    <div className="pointer-events-none absolute inset-0 rounded-xl overflow-hidden z-0">
+      <div
+        className="absolute inset-0 opacity-[0.055]"
+        style={{
+          backgroundImage: `repeating-linear-gradient(
+            45deg,
+            ${stripeColor[rank]} 0px,
+            ${stripeColor[rank]} 1px,
+            transparent 1px,
+            transparent 6px
+          ), repeating-linear-gradient(
+            -45deg,
+            ${stripeColor[rank]} 0px,
+            ${stripeColor[rank]} 1px,
+            transparent 1px,
+            transparent 6px
+          )`,
+        }}
+      />
+      <motion.div
+        className={`absolute inset-0 bg-gradient-to-r ${shimmerColor[rank]}`}
+        animate={{ x: ["-100%", "200%"] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
+        style={{ skewX: -15 }}
+      />
+    </div>
+  );
+}
+
 export default function PublicProfile() {
   const { userId }   = useParams();
   const { user }     = useAuth();
@@ -45,6 +111,7 @@ export default function PublicProfile() {
   const [loading, setLoading]             = useState(true);
   const [watchingVideo, setWatchingVideo] = useState(false);
   const [requesting, setRequesting]       = useState(false);
+  const [leaderRank, setLeaderRank]       = useState<number | null>(null);
 
   // Report modal state
   const [showReportModal, setShowReportModal] = useState(false);
@@ -67,6 +134,18 @@ export default function PublicProfile() {
       setSessionCount(sessRes.count ?? 0);
       setLoading(false);
     });
+
+    // Fetch top 3 by credits to determine leaderboard rank
+    supabase
+      .from("profiles")
+      .select("user_id, credits")
+      .order("credits", { ascending: false })
+      .limit(3)
+      .then(({ data }) => {
+        if (!data) return;
+        const idx = data.findIndex((p) => p.user_id === userId);
+        if (idx !== -1) setLeaderRank(idx + 1);
+      });
   }, [userId]);
 
   // Check if current user already reported this profile
@@ -154,26 +233,42 @@ export default function PublicProfile() {
 
           {/* Hero card */}
           <motion.div variants={item}>
-            <Card className="overflow-hidden">
-              <div className="h-24 bg-gradient-to-r from-primary/20 via-accent/10 to-primary/5 relative">
+            {(() => {
+              const rankStyle = leaderRank ? RANK_STYLES[leaderRank] : null;
+              return (
+            <Card className={`overflow-hidden relative ${rankStyle?.card ?? ""}`}>
+              {/* Carbon-fiber shimmer for top 3 */}
+              {rankStyle && <CarbonShimmer rank={leaderRank!} />}
+              <div className="h-24 bg-gradient-to-r from-primary/20 via-accent/10 to-primary/5 relative z-10">
                 <div className="absolute inset-0 opacity-30"
                   style={{ backgroundImage: "radial-gradient(circle at 20% 50%, hsl(160 84% 39% / 0.4) 0%, transparent 60%), radial-gradient(circle at 80% 50%, hsl(270 60% 58% / 0.3) 0%, transparent 60%)" }} />
               </div>
-              <CardContent className="p-6 pt-0 -mt-12">
+              <CardContent className="p-6 pt-0 -mt-12 relative z-10">
                 <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5">
                   <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.15, type: "spring", stiffness: 180 }} className="shrink-0">
+                    transition={{ delay: 0.15, type: "spring", stiffness: 180 }} className="shrink-0 relative">
                     {profile.avatar_url ? (
                       <img src={profile.avatar_url} alt={profile.display_name}
-                        className="h-24 w-24 rounded-2xl object-cover border-4 border-background shadow-lg" />
+                        className={`h-24 w-24 rounded-2xl object-cover shadow-lg ${rankStyle?.avatarRing ?? "border-4 border-background"}`} />
                     ) : (
-                      <div className="h-24 w-24 rounded-2xl bg-muted flex items-center justify-center border-4 border-background shadow-lg">
+                      <div className={`h-24 w-24 rounded-2xl bg-muted flex items-center justify-center shadow-lg ${rankStyle?.avatarRing ?? "border-4 border-background"}`}>
                         <User className="h-10 w-10 text-muted-foreground" />
                       </div>
                     )}
+                    {/* Medal on avatar */}
+                    {rankStyle && (
+                      <span className="absolute -bottom-2 -right-2 text-xl leading-none drop-shadow">{rankStyle.medal}</span>
+                    )}
                   </motion.div>
                   <div className="flex-1 text-center sm:text-left pb-1">
-                    <h1 className="text-2xl font-display font-bold">{profile.display_name || "Anonymous"}</h1>
+                    <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
+                      <h1 className="text-2xl font-display font-bold">{profile.display_name || "Anonymous"}</h1>
+                      {rankStyle && (
+                        <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${rankStyle.badge}`}>
+                          {rankStyle.label}
+                        </span>
+                      )}
+                    </div>
                     {avgRating > 0 && (
                       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
                         className="flex items-center gap-1 mt-1 justify-center sm:justify-start">
@@ -238,6 +333,8 @@ export default function PublicProfile() {
                 </motion.div>
               </CardContent>
             </Card>
+              );
+            })()}
           </motion.div>
 
           {/* Quick stats */}
