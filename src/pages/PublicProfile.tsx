@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Star, Award, ArrowLeft, Play, X, MessageSquare, BookOpen, GraduationCap } from "lucide-react";
+import { User, Star, Award, ArrowLeft, Play, X, MessageSquare, BookOpen, GraduationCap, Flag } from "lucide-react";
 
 function AnimCount({ value }: { value: number }) {
   const [display, setDisplay] = useState(0);
@@ -26,6 +26,14 @@ function AnimCount({ value }: { value: number }) {
   return <>{display}</>;
 }
 
+const REPORT_REASONS = [
+  { value: "spam",            label: "Spam" },
+  { value: "inappropriate",   label: "Inappropriate content" },
+  { value: "fake_profile",    label: "Fake profile" },
+  { value: "harassment",      label: "Harassment" },
+  { value: "other",           label: "Other" },
+];
+
 export default function PublicProfile() {
   const { userId }   = useParams();
   const { user }     = useAuth();
@@ -37,6 +45,13 @@ export default function PublicProfile() {
   const [loading, setLoading]             = useState(true);
   const [watchingVideo, setWatchingVideo] = useState(false);
   const [requesting, setRequesting]       = useState(false);
+
+  // Report modal state
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason]       = useState("");
+  const [reportDesc, setReportDesc]           = useState("");
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [alreadyReported, setAlreadyReported]   = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -54,6 +69,20 @@ export default function PublicProfile() {
     });
   }, [userId]);
 
+  // Check if current user already reported this profile
+  useEffect(() => {
+    if (!user || !userId) return;
+    supabase
+      .from("reports" as any)
+      .select("id")
+      .eq("reporter_id", user.id)
+      .eq("reported_user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setAlreadyReported(true);
+      });
+  }, [user, userId]);
+
   const requestSession = async () => {
     if (!user || !userId) return;
     setRequesting(true);
@@ -61,6 +90,27 @@ export default function PublicProfile() {
     if (error) toast.error(error.message);
     else { toast.success("Session request sent!"); navigate("/sessions"); }
     setRequesting(false);
+  };
+
+  const submitReport = async () => {
+    if (!user || !userId || !reportReason) return;
+    setSubmittingReport(true);
+    const { error } = await supabase.from("reports" as any).insert({
+      reporter_id:      user.id,
+      reported_user_id: userId,
+      reason:           reportReason,
+      description:      reportDesc.trim(),
+    });
+    if (error) {
+      toast.error("Could not submit report. Please try again.");
+    } else {
+      toast.success("Report submitted. We'll review it shortly.");
+      setAlreadyReported(true);
+      setShowReportModal(false);
+      setReportReason("");
+      setReportDesc("");
+    }
+    setSubmittingReport(false);
   };
 
   const offered      = skills.filter((s) => s.skill_type === "offered");
@@ -143,7 +193,7 @@ export default function PublicProfile() {
                   </div>
                 </div>
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
-                  className="flex gap-3 mt-5 flex-wrap justify-center sm:justify-start">
+                  className="flex gap-3 mt-5 flex-wrap justify-center sm:justify-start items-center">
                   {!isOwnProfile && (
                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                       <Button onClick={requestSession} disabled={requesting} className="bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow">
@@ -166,6 +216,22 @@ export default function PublicProfile() {
                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                       <Button variant="outline" onClick={() => setWatchingVideo(true)} className="gap-2">
                         <Play className="h-4 w-4 fill-current" /> Watch Intro
+                      </Button>
+                    </motion.div>
+                  )}
+
+                  {/* ── Report button — only shown to other logged-in users ── */}
+                  {!isOwnProfile && user && (
+                    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="ml-auto">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={alreadyReported}
+                        onClick={() => setShowReportModal(true)}
+                        className={`gap-1.5 text-xs ${alreadyReported ? "text-muted-foreground cursor-not-allowed" : "text-muted-foreground hover:text-destructive hover:bg-destructive/10"}`}
+                      >
+                        <Flag className="h-3.5 w-3.5" />
+                        {alreadyReported ? "Reported" : "Report"}
                       </Button>
                     </motion.div>
                   )}
@@ -269,6 +335,91 @@ export default function PublicProfile() {
           )}
         </motion.div>
       </div>
+
+      {/* ── Report modal ── */}
+      <AnimatePresence>
+        {showReportModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+            onClick={() => setShowReportModal(false)}>
+            <motion.div initial={{ scale: 0.88, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.88, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 200, damping: 22 }}
+              className="bg-card rounded-2xl w-full max-w-md shadow-2xl border border-border"
+              onClick={(e) => e.stopPropagation()}>
+
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Flag className="h-4 w-4 text-destructive" />
+                  <h2 className="font-display font-semibold">Report this profile</h2>
+                </div>
+                <motion.button whileHover={{ rotate: 90, scale: 1.1 }} transition={{ duration: 0.2 }}
+                  onClick={() => setShowReportModal(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-5 w-5" />
+                </motion.button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-4">
+                <div>
+                  <p className="text-sm font-medium mb-2">Reason <span className="text-destructive">*</span></p>
+                  <div className="space-y-2">
+                    {REPORT_REASONS.map((r) => (
+                      <label key={r.value}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                          reportReason === r.value
+                            ? "border-destructive bg-destructive/10 text-foreground"
+                            : "border-border hover:border-muted-foreground/40"
+                        }`}>
+                        <input
+                          type="radio"
+                          name="report-reason"
+                          value={r.value}
+                          checked={reportReason === r.value}
+                          onChange={() => setReportReason(r.value)}
+                          className="accent-destructive"
+                        />
+                        <span className="text-sm">{r.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium mb-2">Additional details <span className="text-muted-foreground text-xs">(optional)</span></p>
+                  <textarea
+                    value={reportDesc}
+                    onChange={(e) => setReportDesc(e.target.value)}
+                    placeholder="Tell us more about the issue…"
+                    rows={3}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground"
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 p-5 pt-0">
+                <Button variant="outline" className="flex-1" onClick={() => setShowReportModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={!reportReason || submittingReport}
+                  onClick={submitReport}
+                >
+                  {submittingReport ? (
+                    <span className="flex items-center gap-2">
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                        className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent" />
+                      Submitting…
+                    </span>
+                  ) : "Submit Report"}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Video modal */}
       <AnimatePresence>
