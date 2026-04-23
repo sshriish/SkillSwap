@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { Trophy, Star } from "lucide-react";
@@ -114,9 +115,35 @@ export default function Leaderboard() {
           ))}
         </div>
 
+        {/* ── Skeleton loading ── */}
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="space-y-4">
+            {/* Podium skeleton */}
+            <div className="grid grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className={`rounded-xl border border-border bg-card p-4 flex flex-col items-center gap-2 ${i === 2 ? "pt-4" : "pt-10"}`}>
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <Skeleton className="h-14 w-14 rounded-full" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-3 w-14" />
+                  <Skeleton className="h-5 w-16" />
+                </div>
+              ))}
+            </div>
+            {/* List skeleton */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4 p-2">
+                  <Skeleton className="h-6 w-6 rounded-full shrink-0" />
+                  <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <Skeleton className="h-4 w-16 shrink-0" />
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <>
