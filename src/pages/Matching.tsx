@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
@@ -26,6 +27,7 @@ const CATEGORIES = ["All", "Programming", "Design", "Marketing", "Music", "Langu
 
 export default function Matching() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [matches, setMatches] = useState<MatchUser[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,8 @@ export default function Matching() {
   };
 
   const filtered = matches.filter((m) => {
-    const matchesSearch = m.display_name.toLowerCase().includes(search.toLowerCase()) ||
+    const matchesSearch =
+      m.display_name.toLowerCase().includes(search.toLowerCase()) ||
       m.offeredSkills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
     const matchesFav = showFavourites ? favourites.has(m.user_id) : true;
     return matchesSearch && matchesFav;
@@ -177,18 +180,30 @@ export default function Matching() {
               <motion.div key={m.user_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <Card className="hover:shadow-md transition-shadow">
                   <CardContent className="flex items-start gap-4 p-5">
-                    <div className="shrink-0">
+
+                    {/* Avatar — clickable */}
+                    <div
+                      className="shrink-0 cursor-pointer"
+                      onClick={() => navigate(`/profile/${m.user_id}`)}
+                    >
                       {m.avatar_url ? (
-                        <img src={m.avatar_url} alt={m.display_name} className="h-14 w-14 rounded-full object-cover border-2 border-primary/20" />
+                        <img src={m.avatar_url} alt={m.display_name} className="h-14 w-14 rounded-full object-cover border-2 border-primary/20 hover:opacity-80 transition-opacity" />
                       ) : (
-                        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center border-2 border-border">
+                        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center border-2 border-border hover:opacity-80 transition-opacity">
                           <UserIcon className="h-6 w-6 text-muted-foreground" />
                         </div>
                       )}
                     </div>
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-display font-semibold">{m.display_name}</h3>
+                        {/* Name — clickable */}
+                        <h3
+                          className="font-display font-semibold cursor-pointer hover:text-primary transition-colors"
+                          onClick={() => navigate(`/profile/${m.user_id}`)}
+                        >
+                          {m.display_name}
+                        </h3>
                         {favourites.has(m.user_id) && <Heart className="h-3.5 w-3.5 fill-red-500 text-red-500" />}
                       </div>
                       <div className="mt-0.5 mb-1">{renderStars(m.avgRating, m.reviewCount)}</div>
@@ -208,6 +223,7 @@ export default function Matching() {
                         )}
                       </div>
                     </div>
+
                     <div className="flex flex-col gap-2 shrink-0">
                       <button onClick={() => toggleFavourite(m.user_id)} className="p-2 rounded-lg hover:bg-muted transition-colors">
                         <Heart className={`h-4 w-4 transition-colors ${favourites.has(m.user_id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
@@ -221,6 +237,7 @@ export default function Matching() {
                         Request <ArrowRight className="ml-1 h-3 w-3" />
                       </Button>
                     </div>
+
                   </CardContent>
                 </Card>
               </motion.div>
