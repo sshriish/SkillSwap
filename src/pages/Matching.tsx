@@ -22,9 +22,79 @@ interface MatchUser {
   wantedSkills: string[];
   avgRating: number;
   reviewCount: number;
+  credits: number;
 }
 
 const CATEGORIES = ["All", "Programming", "Design", "Marketing", "Music", "Languages", "Business", "Science", "General"];
+
+// Gold / Silver / Bronze styles for top 3
+const RANK_STYLES: Record<number, { card: string; avatar: string; badge: string; label: string; medal: string }> = {
+  1: {
+    card: "ring-2 ring-yellow-400/70 shadow-[0_0_18px_2px_rgba(250,204,21,0.25)]",
+    avatar: "ring-[3px] ring-yellow-400 ring-offset-2 ring-offset-card",
+    badge: "bg-yellow-400/15 text-yellow-500 border border-yellow-400/40",
+    label: "🥇 #1 on Leaderboard",
+    medal: "🥇",
+  },
+  2: {
+    card: "ring-2 ring-slate-400/60 shadow-[0_0_14px_2px_rgba(148,163,184,0.2)]",
+    avatar: "ring-[3px] ring-slate-400 ring-offset-2 ring-offset-card",
+    badge: "bg-slate-400/15 text-slate-400 border border-slate-400/40",
+    label: "🥈 #2 on Leaderboard",
+    medal: "🥈",
+  },
+  3: {
+    card: "ring-2 ring-amber-600/60 shadow-[0_0_14px_2px_rgba(180,83,9,0.2)]",
+    avatar: "ring-[3px] ring-amber-600 ring-offset-2 ring-offset-card",
+    badge: "bg-amber-600/15 text-amber-600 border border-amber-600/40",
+    label: "🥉 #3 on Leaderboard",
+    medal: "🥉",
+  },
+};
+
+// Carbon-fiber shimmer overlay for top-ranked cards
+function CarbonShimmer({ rank }: { rank: number }) {
+  const shimmerColor: Record<number, string> = {
+    1: "from-yellow-400/0 via-yellow-300/10 to-yellow-400/0",
+    2: "from-slate-400/0 via-slate-300/8 to-slate-400/0",
+    3: "from-amber-600/0 via-amber-400/8 to-amber-600/0",
+  };
+  const stripeColor: Record<number, string> = {
+    1: "#facc15",
+    2: "#94a3b8",
+    3: "#b45309",
+  };
+  return (
+    <div className="pointer-events-none absolute inset-0 rounded-xl overflow-hidden">
+      {/* Carbon-fiber diagonal stripe pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.055]"
+        style={{
+          backgroundImage: `repeating-linear-gradient(
+            45deg,
+            ${stripeColor[rank]} 0px,
+            ${stripeColor[rank]} 1px,
+            transparent 1px,
+            transparent 6px
+          ), repeating-linear-gradient(
+            -45deg,
+            ${stripeColor[rank]} 0px,
+            ${stripeColor[rank]} 1px,
+            transparent 1px,
+            transparent 6px
+          )`,
+        }}
+      />
+      {/* Animated shimmer sweep */}
+      <motion.div
+        className={`absolute inset-0 bg-gradient-to-r ${shimmerColor[rank]}`}
+        animate={{ x: ["-100%", "200%"] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
+        style={{ skewX: -15 }}
+      />
+    </div>
+  );
+}
 
 export default function Matching() {
   const { user } = useAuth();
@@ -36,6 +106,7 @@ export default function Matching() {
   const [favourites, setFavourites] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [showFavourites, setShowFavourites] = useState(false);
+  const [topRanks, setTopRanks] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -79,7 +150,14 @@ export default function Matching() {
           ? Math.round((ratingsByUser[p.user_id].total / ratingsByUser[p.user_id].count) * 10) / 10
           : 0,
         reviewCount: ratingsByUser[p.user_id]?.count || 0,
+        credits: (p as any).credits || 0,
       }));
+
+      // Determine top 3 by credits (same metric as leaderboard default)
+      const sorted = [...users].sort((a, b) => b.credits - a.credits);
+      const ranks: Record<string, number> = {};
+      sorted.slice(0, 3).forEach((u, i) => { ranks[u.user_id] = i + 1; });
+      setTopRanks(ranks);
 
       setMatches(users);
       setLoading(false);
@@ -197,69 +275,87 @@ export default function Matching() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {filtered.map((m, i) => (
-              <motion.div key={m.user_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                <Card className="hover:shadow-md transition-shadow">
-                  <CardContent className="flex items-start gap-4 p-5">
+            {filtered.map((m, i) => {
+              const rank = topRanks[m.user_id];
+              const rankStyle = rank ? RANK_STYLES[rank] : null;
+              return (
+                <motion.div key={m.user_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                  <Card className={`hover:shadow-md transition-shadow relative overflow-hidden ${rankStyle?.card ?? ""}`}>
+                    {/* Carbon-fiber shimmer for top 3 */}
+                    {rankStyle && <CarbonShimmer rank={rank} />}
 
-                    {/* Avatar — clickable */}
-                    <div className="shrink-0 cursor-pointer" onClick={() => navigate(`/profile/${m.user_id}`)}>
-                      {m.avatar_url ? (
-                        <img src={m.avatar_url} alt={m.display_name} className="h-14 w-14 rounded-full object-cover border-2 border-primary/20 hover:opacity-80 transition-opacity" />
-                      ) : (
-                        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center border-2 border-border hover:opacity-80 transition-opacity">
-                          <UserIcon className="h-6 w-6 text-muted-foreground" />
+                    <CardContent className="flex items-start gap-4 p-5 relative">
+
+                      {/* Avatar — clickable, with rank ring + medal */}
+                      <div className="shrink-0 cursor-pointer relative" onClick={() => navigate(`/profile/${m.user_id}`)}>
+                        {m.avatar_url ? (
+                          <img
+                            src={m.avatar_url}
+                            alt={m.display_name}
+                            className={`h-14 w-14 rounded-full object-cover hover:opacity-80 transition-opacity ${rankStyle?.avatar ?? "border-2 border-primary/20"}`}
+                          />
+                        ) : (
+                          <div className={`h-14 w-14 rounded-full bg-muted flex items-center justify-center hover:opacity-80 transition-opacity ${rankStyle?.avatar ?? "border-2 border-border"}`}>
+                            <UserIcon className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        {rankStyle && (
+                          <span className="absolute -bottom-1 -right-1 text-sm leading-none drop-shadow">{rankStyle.medal}</span>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3
+                            className="font-display font-semibold cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => navigate(`/profile/${m.user_id}`)}
+                          >
+                            {m.display_name}
+                          </h3>
+                          {favourites.has(m.user_id) && <Heart className="h-3.5 w-3.5 fill-red-500 text-red-500" />}
+                          {rankStyle && (
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${rankStyle.badge}`}>
+                              {rankStyle.label}
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        {/* Name — clickable */}
-                        <h3
-                          className="font-display font-semibold cursor-pointer hover:text-primary transition-colors"
-                          onClick={() => navigate(`/profile/${m.user_id}`)}
-                        >
-                          {m.display_name}
-                        </h3>
-                        {favourites.has(m.user_id) && <Heart className="h-3.5 w-3.5 fill-red-500 text-red-500" />}
+                        <div className="mt-0.5 mb-1">{renderStars(m.avgRating, m.reviewCount)}</div>
+                        {m.bio && <p className="text-sm text-muted-foreground line-clamp-1">{m.bio}</p>}
+                        <div className="mt-2 space-y-1">
+                          {m.offeredSkills.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              <span className="text-xs text-muted-foreground mr-1">Teaches:</span>
+                              {m.offeredSkills.map((s) => <Badge key={s} variant="default" className="text-xs">{s}</Badge>)}
+                            </div>
+                          )}
+                          {m.wantedSkills.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              <span className="text-xs text-muted-foreground mr-1">Wants:</span>
+                              {m.wantedSkills.map((s) => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="mt-0.5 mb-1">{renderStars(m.avgRating, m.reviewCount)}</div>
-                      {m.bio && <p className="text-sm text-muted-foreground line-clamp-1">{m.bio}</p>}
-                      <div className="mt-2 space-y-1">
-                        {m.offeredSkills.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            <span className="text-xs text-muted-foreground mr-1">Teaches:</span>
-                            {m.offeredSkills.map((s) => <Badge key={s} variant="default" className="text-xs">{s}</Badge>)}
-                          </div>
-                        )}
-                        {m.wantedSkills.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            <span className="text-xs text-muted-foreground mr-1">Wants:</span>
-                            {m.wantedSkills.map((s) => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="flex flex-col gap-2 shrink-0">
-                      <button onClick={() => toggleFavourite(m.user_id)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                        <Heart className={`h-4 w-4 transition-colors ${favourites.has(m.user_id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
-                      </button>
-                      {m.trial_video_url && (
-                        <Button size="sm" variant="outline" onClick={() => setWatchingVideo(m)} className="gap-1">
-                          <Play className="h-3 w-3" /> Watch
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <button onClick={() => toggleFavourite(m.user_id)} className="p-2 rounded-lg hover:bg-muted transition-colors">
+                          <Heart className={`h-4 w-4 transition-colors ${favourites.has(m.user_id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+                        </button>
+                        {m.trial_video_url && (
+                          <Button size="sm" variant="outline" onClick={() => setWatchingVideo(m)} className="gap-1">
+                            <Play className="h-3 w-3" /> Watch
+                          </Button>
+                        )}
+                        <Button size="sm" onClick={() => requestSession(m.user_id)} className="bg-gradient-primary text-primary-foreground hover:opacity-90">
+                          Request <ArrowRight className="ml-1 h-3 w-3" />
                         </Button>
-                      )}
-                      <Button size="sm" onClick={() => requestSession(m.user_id)} className="bg-gradient-primary text-primary-foreground hover:opacity-90">
-                        Request <ArrowRight className="ml-1 h-3 w-3" />
-                      </Button>
-                    </div>
+                      </div>
 
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </div>
