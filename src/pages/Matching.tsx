@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -166,9 +167,24 @@ export default function Matching() {
           ))}
         </div>
 
+        {/* ── Skeleton loading ── */}
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="grid gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-start gap-4 p-5 rounded-xl border border-border bg-card">
+                <Skeleton className="h-14 w-14 rounded-full shrink-0" />
+                <div className="flex-1 space-y-2 pt-1">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-52" />
+                  <div className="flex gap-2 pt-1">
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                  </div>
+                </div>
+                <Skeleton className="h-9 w-24 rounded-lg shrink-0 mt-1" />
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
@@ -182,10 +198,7 @@ export default function Matching() {
                   <CardContent className="flex items-start gap-4 p-5">
 
                     {/* Avatar — clickable */}
-                    <div
-                      className="shrink-0 cursor-pointer"
-                      onClick={() => navigate(`/profile/${m.user_id}`)}
-                    >
+                    <div className="shrink-0 cursor-pointer" onClick={() => navigate(`/profile/${m.user_id}`)}>
                       {m.avatar_url ? (
                         <img src={m.avatar_url} alt={m.display_name} className="h-14 w-14 rounded-full object-cover border-2 border-primary/20 hover:opacity-80 transition-opacity" />
                       ) : (
