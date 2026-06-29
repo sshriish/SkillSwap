@@ -12,7 +12,7 @@ jobs:
       - name: Ping app to keep Supabase active
         run: |
           echo "Pinging SkillSwap..."
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://YOUR-SKILLSWAP-URL.com/)
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://skillswap-ten-coral.vercel.app//)
           echo "Response status: $STATUS"
           if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
             echo "✅ Ping successful!"
