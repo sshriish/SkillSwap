@@ -2,17 +2,19 @@ name: Keep Supabase Alive
 
 on:
   schedule:
-    - cron: '0 9 */6 * *'   # Runs every 6 days at 9:00 AM UTC
-  workflow_dispatch:          # Allows manual trigger from GitHub Actions tab
+    - cron: '0 9 * * 1'  # every Monday at 9am UTC
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping app to keep Supabase active
+      - name: Ping Supabase to keep it active
         run: |
-          echo "Pinging SkillSwap..."
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://skillswap-ten-coral.vercel.app//)
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
+            "https://pbovvqphdkehuanpeauq.supabase.co/rest/v1/?select=*" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBib3Z2cXBoZGtlaHVhbnBlYXVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjEyNzEsImV4cCI6MjA4ODk5NzI3MX0.fsOY4o6O1qo7wxPgMgGDh-YggAnC1uthSotZYs-uHHE" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBib3Z2cXBoZGtlaHVhbnBlYXVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjEyNzEsImV4cCI6MjA4ODk5NzI3MX0.fsOY4o6O1qo7wxPgMgGDh-YggAnC1uthSotZYs-uHHE")
           echo "Response status: $STATUS"
           if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
             echo "✅ Ping successful!"
