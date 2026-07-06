@@ -72,9 +72,13 @@ npm run test
 
 ## Project Structure
 SkillSwap/
+
 ├── src/            # Application source code
+
 ├── public/         # Static assets
+
 ├── supabase/       # Supabase config/migrations
+
 └── .github/        # CI workflows
 ## Contributing
 
