@@ -43,11 +43,17 @@ cp .env.example .env
 
 | Variable | Description |
 |---|---|
+
 | `VITE_SUPABASE_PROJECT_ID` | Your Supabase project ID |
+
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon/public API key |
+
 | `VITE_SUPABASE_URL` | Your Supabase project URL |
+
 | `VITE_TURN_URL` | TURN server URL for WebRTC relay |
+
 | `VITE_TURN_USERNAME` | TURN server username |
+
 | `VITE_TURN_CREDENTIAL` | TURN server credential |
 
 ### Run locally
