@@ -83,3 +83,4 @@ SkillSwap/
 ## Contributing
 
 Contributions are welcome! Feel free to open an issue or submit a pull request.
+## 👨‍💻 Developer Built by **Shrish Sharan** — 2026
